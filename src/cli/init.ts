@@ -1,6 +1,7 @@
 import { join } from 'path';
-import { readdir, chmod } from 'fs/promises';
+import { readdir } from 'fs/promises';
 import yaml from 'js-yaml';
+import * as p from '@clack/prompts';
 import {
   CONFIG_FILENAME,
   CONTENT_DIR,
@@ -13,30 +14,9 @@ import {
 import { configExists } from '../core/config-loader.js';
 import { ensureDir, writeTextFile, fileExists, readTextFile, getPackageRoot } from '../utils/file-ops.js';
 import { log, createSpinner } from '../utils/logger.js';
-
-const DEFAULT_CONFIG = {
-  version: '1.0',
-
-  editors: {
-    cursor: true,
-    windsurf: true,
-    claude: true,
-    kiro: false,
-    trae: false,
-    gemini: false,
-  },
-
-  metadata: {
-    name: '',
-    description: '',
-  },
-
-  tech_stack: {
-    language: '',
-    framework: '',
-    database: '',
-  },
-};
+import { DEFAULT_CONFIG, generateProjectContext } from '../sync/project-context.js';
+import { installPreCommitHook } from '../utils/git-hooks.js';
+import { addSyncScripts } from '../utils/package-scripts.js';
 
 const EXAMPLE_RULE = `# Project Conventions
 
@@ -64,132 +44,225 @@ async function copyTemplates(templateSubdir: string, contentDir: string, targetS
     const entries = await readdir(templatesDir, { withFileTypes: true });
 
     for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
+      if (entry.isDirectory()) {
+        await copyTemplates(join(templateSubdir, entry.name), contentDir, join(targetSubdir, entry.name));
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        const targetPath = join(targetDir, entry.name);
+        if (await fileExists(targetPath)) continue;
 
-      const targetPath = join(targetDir, entry.name);
-      if (await fileExists(targetPath)) continue;
-
-      const content = await readTextFile(join(templatesDir, entry.name));
-      await writeTextFile(targetPath, content);
+        const content = await readTextFile(join(templatesDir, entry.name));
+        await writeTextFile(targetPath, content);
+      }
     }
   } catch {
     // Templates dir doesn't exist — skip silently
   }
 }
 
-const SYNC_SCRIPTS: Record<string, string> = {
-  sync: 'ai-toolkit sync',
-  'sync:dry': 'ai-toolkit sync --dry-run',
-  'sync:watch': 'ai-toolkit watch',
-};
+const ALL_EDITORS = [
+  { value: 'cursor', label: 'Cursor', hint: 'AI-first code editor' },
+  { value: 'windsurf', label: 'Windsurf', hint: 'Codeium editor' },
+  { value: 'claude', label: 'Claude Code', hint: 'Anthropic CLI' },
+  { value: 'kiro', label: 'Kiro', hint: 'AWS AI editor' },
+  { value: 'trae', label: 'Trae', hint: 'ByteDance AI editor' },
+  { value: 'gemini', label: 'Gemini CLI', hint: 'Google CLI' },
+  { value: 'copilot', label: 'GitHub Copilot', hint: 'VS Code extension' },
+  { value: 'codex', label: 'Codex CLI', hint: 'OpenAI CLI' },
+  { value: 'aider', label: 'Aider', hint: 'terminal pair programmer' },
+  { value: 'roo', label: 'Roo Code', hint: 'VS Code extension' },
+  { value: 'kilocode', label: 'KiloCode', hint: 'VS Code extension' },
+  { value: 'antigravity', label: 'Antigravity', hint: 'AI editor' },
+  { value: 'bolt', label: 'Bolt', hint: 'StackBlitz AI' },
+  { value: 'warp', label: 'Warp', hint: 'AI terminal' },
+];
 
-async function addSyncScripts(projectRoot: string): Promise<boolean> {
-  const pkgPath = join(projectRoot, 'package.json');
-  let pkg: Record<string, unknown> = {};
-
-  if (await fileExists(pkgPath)) {
-    try {
-      const raw = await readTextFile(pkgPath);
-      pkg = JSON.parse(raw);
-    } catch {
-      return false;
-    }
-  }
-
-  const scripts = (pkg.scripts ?? {}) as Record<string, string>;
-  let added = false;
-
-  for (const [name, cmd] of Object.entries(SYNC_SCRIPTS)) {
-    if (!scripts[name]) {
-      scripts[name] = cmd;
-      added = true;
-    }
-  }
-
-  if (!added) return false;
-
-  pkg.scripts = scripts;
-  await writeTextFile(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
-  return true;
+function isCancelled(value: unknown): value is symbol {
+  return p.isCancel(value);
 }
 
-const PRE_COMMIT_HOOK = `#!/bin/sh
-# ai-toolkit: auto-sync before commit
-# Ensures editor configs stay in sync with .ai-content/
+async function selectOrCustom(message: string, options: string[]): Promise<string | null> {
+  const allOptions = [
+    ...options.map((o) => ({ value: o, label: o })),
+    { value: '__none__', label: 'None / skip' },
+    { value: '__other__', label: 'Other...' },
+  ];
 
-if command -v ai-toolkit >/dev/null 2>&1; then
-  ai-toolkit sync
-  git add .cursorrules .windsurfrules CLAUDE.md .cursor/ .windsurf/ .claude/ .kiro/ .trae/ .gemini/ .github/copilot-instructions.md AGENTS.md .aider* .roo/ .kilocode/ .antigravity/ .bolt/ .warp/ 2>/dev/null
-elif command -v npx >/dev/null 2>&1; then
-  npx ai-toolkit sync
-  git add .cursorrules .windsurfrules CLAUDE.md .cursor/ .windsurf/ .claude/ .kiro/ .trae/ .gemini/ .github/copilot-instructions.md AGENTS.md .aider* .roo/ .kilocode/ .antigravity/ .bolt/ .warp/ 2>/dev/null
-fi
-`;
+  const selected = await p.select({ message, options: allOptions });
+  if (isCancelled(selected)) return null;
 
-async function installPreCommitHook(projectRoot: string): Promise<boolean> {
-  const gitDir = join(projectRoot, '.git');
-  if (!(await fileExists(gitDir))) return false;
-
-  const hooksDir = join(gitDir, 'hooks');
-  await ensureDir(hooksDir);
-
-  const hookPath = join(hooksDir, 'pre-commit');
-
-  if (await fileExists(hookPath)) {
-    const existing = await readTextFile(hookPath);
-    if (existing.includes('ai-toolkit')) return false;
-
-    // Append to existing hook
-    await writeTextFile(hookPath, existing.trimEnd() + '\n\n' + PRE_COMMIT_HOOK);
-  } else {
-    await writeTextFile(hookPath, PRE_COMMIT_HOOK);
+  if (selected === '__none__') return '';
+  if (selected === '__other__') {
+    const custom = await p.text({ message: `${message} (custom)`, placeholder: 'Type your answer...' });
+    if (isCancelled(custom)) return null;
+    return custom as string;
   }
-
-  await chmod(hookPath, 0o755);
-  return true;
+  return selected as string;
 }
 
-async function generateProjectContext(config: typeof DEFAULT_CONFIG): Promise<string> {
-  const packageRoot = getPackageRoot();
-  const templatePath = join(packageRoot, 'templates', 'project-context.md');
+async function runInteractiveSetup(): Promise<Record<string, unknown> | null> {
+  const config: Record<string, unknown> = { version: '1.0' };
 
-  let template: string;
-  try {
-    template = await readTextFile(templatePath);
-  } catch {
-    // Fallback if template file is not found
-    template = `# Project Context\n\n## Overview\n<!-- Describe what this project does -->\n\n## Tech Stack\n\n## Conventions\n`;
+  // --- 1. Project metadata ---
+  const name = await p.text({
+    message: 'Project name',
+    placeholder: 'my-project',
+  });
+  if (isCancelled(name)) return null;
+
+  const description = await p.text({
+    message: 'Description (optional)',
+    placeholder: 'A short description of your project',
+    defaultValue: '',
+  });
+  if (isCancelled(description)) return null;
+
+  config.metadata = { name, description };
+
+  // --- 2. Tech stack (select from common options or type custom) ---
+  const language = await selectOrCustom('Language', [
+    'TypeScript', 'JavaScript', 'Python', 'Go', 'Rust', 'Java', 'C#', 'PHP', 'Ruby', 'Swift', 'Kotlin',
+  ]);
+  if (language === null) return null;
+
+  const framework = await selectOrCustom('Framework', [
+    'Next.js', 'React', 'Vue', 'Svelte', 'Angular', 'Nuxt', 'Remix', 'Astro',
+    'Express', 'Fastify', 'Hono', 'Django', 'Flask', 'FastAPI', 'Rails', 'Laravel', 'Spring Boot',
+  ]);
+  if (framework === null) return null;
+
+  const database = await selectOrCustom('Database', [
+    'PostgreSQL', 'MySQL', 'SQLite', 'MongoDB', 'Redis', 'Supabase', 'PlanetScale',
+    'DynamoDB', 'Firestore', 'Prisma', 'Drizzle',
+  ]);
+  if (database === null) return null;
+
+  const runtime = await selectOrCustom('Runtime', [
+    'Node.js', 'Bun', 'Deno', 'Python', 'Go', 'JVM', '.NET',
+  ]);
+  if (runtime === null) return null;
+
+  config.tech_stack = {
+    ...(language && { language }),
+    ...(framework && { framework }),
+    ...(database && { database }),
+    ...(runtime && { runtime }),
+  };
+
+  // --- 3. Editors (multiselect with arrow keys + spacebar) ---
+  const selectedEditors = await p.multiselect({
+    message: 'Which editors do you use? (space to toggle, enter to confirm)',
+    options: ALL_EDITORS,
+    initialValues: ['cursor', 'windsurf', 'claude'],
+    required: true,
+  });
+  if (isCancelled(selectedEditors)) return null;
+
+  const editors: Record<string, boolean> = {};
+  for (const editor of ALL_EDITORS) {
+    editors[editor.value] = (selectedEditors as string[]).includes(editor.value);
   }
+  config.editors = editors;
 
-  // Auto-fill tech stack from config
-  if (config.tech_stack) {
-    const entries = Object.entries(config.tech_stack).filter(([, v]) => v);
-    if (entries.length > 0) {
-      const stackLines = entries.map(([key, value]) => `- **${key}**: ${value}`).join('\n');
-      template = template.replace(
-        '<!-- Auto-filled from ai-toolkit.yaml — edit or expand as needed -->',
-        `<!-- Auto-filled from ai-toolkit.yaml — edit or expand as needed -->\n${stackLines}`,
-      );
+  // --- 4. Content sources ---
+  p.note(
+    'A shared content source lets you reuse the same rules, skills,\n' +
+    'and workflows across multiple projects. New files you add locally\n' +
+    'are automatically synced back to the shared source.',
+    'Shared content source',
+  );
+
+  const wantSsot = await p.confirm({
+    message: 'Do you have a shared folder or package with reusable rules/skills?',
+    initialValue: false,
+  });
+  if (isCancelled(wantSsot)) return null;
+
+  if (wantSsot) {
+    const sourceType = await p.select({
+      message: 'Where are the shared rules/skills stored?',
+      options: [
+        { value: 'local', label: 'Local folder', hint: 'a folder on your machine, e.g. ../shared-rules' },
+        { value: 'package', label: 'npm package', hint: 'an installed package, e.g. @company/ai-rules' },
+      ],
+    });
+    if (isCancelled(sourceType)) return null;
+
+    if (sourceType === 'package') {
+      const packageName = await p.text({
+        message: 'Package name',
+        placeholder: '@company/ai-rules',
+      });
+      if (isCancelled(packageName)) return null;
+      if (packageName) {
+        config.content_sources = [{ type: 'package', name: packageName }];
+      }
+    } else {
+      const localPath = await p.select({
+        message: 'Path to the shared folder',
+        options: [
+          { value: '../ai-toolkit', label: '../ai-toolkit', hint: 'default' },
+          { value: '__custom__', label: 'Custom path...' },
+        ],
+      });
+      if (isCancelled(localPath)) return null;
+
+      let finalPath = localPath as string;
+      if (localPath === '__custom__') {
+        const custom = await p.text({
+          message: 'Custom path (relative to this project)',
+          placeholder: '../my-shared-rules',
+        });
+        if (isCancelled(custom)) return null;
+        finalPath = custom as string;
+      }
+      if (finalPath) {
+        config.content_sources = [{ type: 'local', path: finalPath }];
+      }
     }
   }
 
-  return template;
+  return config;
 }
 
 export async function runInit(projectRoot: string, force: boolean): Promise<void> {
-  const spinner = createSpinner('Initializing ai-toolkit...');
-  spinner.start();
-
   try {
     const exists = await configExists(projectRoot);
     if (exists && !force) {
-      spinner.warn('ai-toolkit is already initialized. Use --force to reinitialize.');
+      log.warn('ai-toolkit is already initialized. Use --force to reinitialize.');
       return;
     }
 
-    // Create config file
     const configPath = join(projectRoot, CONFIG_FILENAME);
-    const configContent = yaml.dump(DEFAULT_CONFIG, {
+    let finalConfig: Record<string, unknown>;
+
+    if (force && exists) {
+      // --force: preserve existing config, merge with defaults
+      finalConfig = { ...DEFAULT_CONFIG };
+      try {
+        const existingContent = await readTextFile(configPath);
+        const existingConfig = yaml.load(existingContent) as Record<string, unknown>;
+        if (existingConfig && typeof existingConfig === 'object') {
+          finalConfig = { ...DEFAULT_CONFIG, ...existingConfig };
+        }
+      } catch {
+        // Existing config is invalid — overwrite with defaults
+      }
+    } else {
+      // Fresh install: run interactive wizard
+      p.intro('🚀 ai-toolkit setup');
+      const result = await runInteractiveSetup();
+      if (!result) {
+        p.cancel('Setup cancelled.');
+        process.exit(0);
+      }
+      finalConfig = result;
+    }
+
+    // Write config
+    const s = p.spinner();
+    s.start('Setting up project...');
+
+    const configContent = yaml.dump(finalConfig, {
       indent: 2,
       lineWidth: 100,
       quotingType: '"',
@@ -232,31 +305,27 @@ export async function runInit(projectRoot: string, force: boolean): Promise<void
     // Install pre-commit hook
     const hookInstalled = await installPreCommitHook(projectRoot);
 
-    spinner.succeed('ai-toolkit initialized!');
+    s.stop('Project initialized!');
 
-    log.info('Created:');
-    log.dim(`${CONFIG_FILENAME} — edit this to configure editors and project metadata`);
-    log.dim(`${CONTENT_DIR}/${PROJECT_CONTEXT_FILE} — describe your project here (included in all entry points)`);
-    log.dim(`${CONTENT_DIR}/rules/ — add your project rules here`);
-    log.dim(`${CONTENT_DIR}/skills/ — add your AI skills/commands here`);
-    log.dim(`${CONTENT_DIR}/workflows/ — add dev workflows here`);
-    log.dim(`${CONTENT_DIR}/overrides/ — add editor-specific overrides here`);
+    const created = [
+      `${CONFIG_FILENAME} — project configuration`,
+      `${CONTENT_DIR}/${PROJECT_CONTEXT_FILE} — project context (included in all entry points)`,
+      `${CONTENT_DIR}/rules/ — project rules`,
+      `${CONTENT_DIR}/skills/ — AI skills/commands`,
+      `${CONTENT_DIR}/workflows/ — dev workflows`,
+      `${CONTENT_DIR}/overrides/ — editor-specific overrides`,
+    ];
     if (scriptsAdded) {
-      log.dim('package.json — added sync, sync:dry, and sync:watch scripts');
+      created.push('package.json — added sync, sync:dry, and sync:watch scripts');
     }
     if (hookInstalled) {
-      log.dim('.git/hooks/pre-commit — auto-sync on commit');
+      created.push('.git/hooks/pre-commit — auto-sync on commit');
     }
 
-    console.log('');
-    log.info('Next steps:');
-    log.dim(`1. Edit ${CONFIG_FILENAME} to enable your editors`);
-    log.dim(`2. Fill in ${CONTENT_DIR}/${PROJECT_CONTEXT_FILE} with your project context`);
-    log.dim(`3. Add rules and skills to ${CONTENT_DIR}/`);
-    log.dim('4. Run "bun run sync" to distribute to all editors');
+    p.note(created.join('\n'), 'Created');
+    p.outro('Run "bun run sync" to distribute to all editors');
   } catch (error) {
-    spinner.fail('Failed to initialize');
-    log.error(error instanceof Error ? error.message : String(error));
+    p.cancel(`Failed to initialize: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
   }
 }

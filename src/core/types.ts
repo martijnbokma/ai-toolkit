@@ -136,13 +136,33 @@ export interface SyncOptions {
   verbose?: boolean;
 }
 
+export interface OrphanedFile {
+  relativePath: string;
+  absolutePath: string;
+}
+
+export interface SsotOrphan {
+  category: string;
+  name: string;
+  absolutePath: string;
+}
+
+export interface SsotDiff {
+  category: string;
+  name: string;
+  localPath: string;
+  ssotPath: string;
+  direction: 'local-newer' | 'ssot-newer';
+}
+
 export interface SyncResult {
   synced: string[];
   skipped: string[];
   removed: string[];
   errors: string[];
-  ssotOrphans: Array<{ category: string; name: string; absolutePath: string }>;
-  ssotDiffs: Array<{ category: string; name: string; localPath: string; ssotPath: string; direction: 'local-newer' | 'ssot-newer' }>;
+  pendingOrphans: OrphanedFile[];
+  ssotOrphans: SsotOrphan[];
+  ssotDiffs: SsotDiff[];
 }
 
 export interface ContentFile {

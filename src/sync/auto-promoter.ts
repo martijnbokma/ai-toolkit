@@ -23,15 +23,15 @@ export async function autoPromoteContent(
       if (localFiles.length === 0) continue;
 
       for (const file of localFiles) {
-        const targetPath = join(ssotDir, `${file.name}.md`);
+        const targetPath = join(ssotDir, file.relativePath);
         if (await fileExists(targetPath)) continue;
 
         if (dryRun) {
-          log.dryRun('would promote', `${category.name}/${file.name}.md → SSOT`);
+          log.dryRun('would promote', `${category.name}/${file.relativePath} → SSOT`);
         } else {
           await ensureDir(ssotDir);
           await writeTextFile(targetPath, file.content);
-          log.synced(`auto-promote ${category.name}/${file.name}.md`, 'SSOT');
+          log.synced(`auto-promote ${category.name}/${file.relativePath}`, 'SSOT');
         }
       }
     } catch {

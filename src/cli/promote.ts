@@ -7,10 +7,16 @@ import { log, createSpinner } from '../utils/logger.js';
 
 type ContentType = 'skills' | 'workflows' | 'rules';
 
-function detectContentType(relativePath: string): ContentType | null {
-  if (relativePath.startsWith(SKILLS_DIR + '/') || relativePath.startsWith('skills/')) return 'skills';
-  if (relativePath.startsWith(WORKFLOWS_DIR + '/') || relativePath.startsWith('workflows/')) return 'workflows';
-  if (relativePath.startsWith(RULES_DIR + '/') || relativePath.startsWith('rules/')) return 'rules';
+const CONTENT_TYPE_DIRS: Array<{ type: ContentType; dir: string }> = [
+  { type: 'skills', dir: SKILLS_DIR },
+  { type: 'workflows', dir: WORKFLOWS_DIR },
+  { type: 'rules', dir: RULES_DIR },
+];
+
+export function detectContentType(relativePath: string): ContentType | null {
+  for (const { type, dir } of CONTENT_TYPE_DIRS) {
+    if (relativePath.startsWith(dir + '/')) return type;
+  }
   return null;
 }
 
@@ -24,7 +30,7 @@ function resolveContentSourcePath(projectRoot: string, config: ToolkitConfig): s
   return resolve(projectRoot, localSource.path);
 }
 
-function resolveFilePath(
+export function resolveFilePath(
   projectRoot: string,
   filePath: string,
 ): { absoluteFilePath: string; relativePath: string } {
@@ -121,10 +127,6 @@ async function promoteContent(
   }
 }
 
-export async function runPromote(projectRoot: string, filePath: string): Promise<void> {
-  await promoteContent(projectRoot, filePath, false);
-}
-
-export async function runPromoteForce(projectRoot: string, filePath: string): Promise<void> {
-  await promoteContent(projectRoot, filePath, true);
+export async function runPromote(projectRoot: string, filePath: string, force = false): Promise<void> {
+  await promoteContent(projectRoot, filePath, force);
 }

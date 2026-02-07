@@ -117,9 +117,9 @@ Process files in order of priority score (highest first). Complete the full pipe
 
 1. **Generate Refactoring PRD**: Use the `refactor-prd` workflow for this specific file.
    - Input: the file path, its scores, and any architectural violations from the candidates list.
-   - Output: `prd-refactor-[filename].md`
+   - Output: `docs/prd-refactor-[filename].md`
 2. **Generate Task List**: Use the `generate-tasks` workflow with the PRD from step 1 as input.
-   - Output: `tasks-refactor-[filename].md`
+   - Output: `docs/tasks-refactor-[filename].md`
 3. **Execute Tasks**: Work through the generated task list, checking off sub-tasks as they are completed.
 4. **Update Status**: Mark the file as completed (✅) in the Priority Matrix.
 

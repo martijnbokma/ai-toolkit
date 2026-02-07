@@ -1,89 +1,100 @@
-# AI Toolkit — Handleiding
+# AI Toolkit — Guide
 
-## Inhoudsopgave
+## Table of Contents
 
-1. [Installatie](#installatie)
-2. [Eerste gebruik](#eerste-gebruik)
-3. [Configuratie](#configuratie)
-4. [Content schrijven](#content-schrijven)
-5. [Editors instellen](#editors-instellen)
-6. [Templates gebruiken](#templates-gebruiken)
-7. [Custom editors](#custom-editors)
-8. [MCP servers](#mcp-servers)
-9. [Editor settings](#editor-settings)
-10. [Monorepo setup](#monorepo-setup)
-11. [CI/CD integratie](#cicd-integratie)
-12. [Commando referentie](#commando-referentie)
+1. [Installation](#installation)
+2. [Getting Started](#getting-started)
+3. [Configuration](#configuration)
+4. [Writing Content](#writing-content)
+5. [Project Context (PROJECT.md)](#project-context-projectmd)
+6. [Editor Setup](#editor-setup)
+7. [Using Templates](#using-templates)
+8. [Built-in Skill & Workflow Templates](#built-in-skill--workflow-templates)
+9. [Custom Editors](#custom-editors)
+10. [Content Sources (shared rules)](#content-sources-shared-rules-across-projects)
+11. [SSOT Synchronization](#ssot-synchronization)
+12. [Promote Command](#promote-command)
+13. [MCP Servers](#mcp-servers)
+14. [Editor Settings](#editor-settings)
+15. [Monorepo Setup](#monorepo-setup)
+16. [CI/CD Integration](#cicd-integration)
+17. [Command Reference](#command-reference)
 
 ---
 
-## Installatie
+## Installation
 
-### Optie 1: Als devDependency (aanbevolen)
+### Option 1: As devDependency (recommended)
 
 ```bash
-# In je project
+# In your project
 bun add -d ai-toolkit
 
-# Of met npm/pnpm
+# Or with npm/pnpm
 npm install -D ai-toolkit
 pnpm add -D ai-toolkit
 ```
 
-### Optie 2: Direct uitvoeren (zonder installatie)
+### Option 2: Run directly (without installation)
 
 ```bash
 bunx ai-toolkit init
 bunx ai-toolkit sync
 ```
 
-### Optie 3: Globaal installeren
+### Option 3: Install globally
 
 ```bash
 bun add -g ai-toolkit
 ```
 
-### Optie 4: Lokaal linken (voor development)
+### Option 4: Link locally (for development)
 
-Als het package nog niet op npm staat, of je wilt een lokale versie testen:
+If the package is not yet on npm, or you want to test a local version:
 
 ```bash
-# In de ai-toolkit repo:
-cd /pad/naar/ai-toolkit
+# In the ai-toolkit repo:
+cd /path/to/ai-toolkit
 bun link
 
-# In je project:
-cd /pad/naar/mijn-project
+# In your project:
+cd /path/to/my-project
 bun link ai-toolkit
 ```
 
-Nu kun je `bun ai-toolkit init` en `bun ai-toolkit sync` gebruiken alsof het geïnstalleerd is.
+Now you can use `bun ai-toolkit init` and `bun ai-toolkit sync` as if it were installed.
 
 ---
 
-## Eerste gebruik
+## Getting Started
 
-### Stap 1: Initialiseer je project
+### Step 1: Initialize your project
 
 ```bash
-cd /pad/naar/je/project
+cd /path/to/your/project
 bun ai-toolkit init
 ```
 
-Dit maakt aan:
-- `ai-toolkit.yaml` — je configuratiebestand
-- `.ai-content/rules/` — projectregels (gedeeld met alle editors)
+This creates:
+- `ai-toolkit.yaml` — your configuration file
+- `.ai-content/PROJECT.md` — project context (included in all entry points)
+- `.ai-content/rules/` — project rules (shared with all editors)
 - `.ai-content/skills/` — AI skills/commands
 - `.ai-content/workflows/` — development workflows
-- `.ai-content/overrides/` — editor-specifieke overrides
+- `.ai-content/overrides/` — editor-specific overrides
 
-Plus voorbeeldbestanden:
+Plus example files:
 - `.ai-content/rules/project-conventions.md`
-- `.ai-content/skills/code-review.md`
+- `.ai-content/skills/code-review.md`, `debug-assistant.md`, `finding-refactor-candidates.md`, `refactor.md`, `verifying-responsiveness.md`
+- `.ai-content/workflows/create-prd.md`, `generate-tasks.md`, `refactor-prd.md`
 
-### Stap 2: Configureer je editors
+Automatic DX setup (when possible):
+- **package.json** — adds `sync`, `sync:dry`, and `sync:watch` scripts
+- **.git/hooks/pre-commit** — installs auto-sync hook (if `.git/` exists)
 
-Open `ai-toolkit.yaml` en zet de editors aan die je gebruikt:
+### Step 2: Configure your editors
+
+Open `ai-toolkit.yaml` and enable the editors you use:
 
 ```yaml
 version: "1.0"
@@ -92,15 +103,15 @@ editors:
   cursor: true
   windsurf: true
   claude: true
-  # Zet op true wat je gebruikt:
+  # Set to true for the ones you use:
   kiro: false
   trae: false
   gemini: false
   copilot: false
 
 metadata:
-  name: "Mijn Project"
-  description: "Korte beschrijving van je project"
+  name: "My Project"
+  description: "Short description of your project"
 
 tech_stack:
   language: typescript
@@ -108,7 +119,7 @@ tech_stack:
   database: supabase
 ```
 
-### Stap 3: Sync naar alle editors
+### Step 3: Sync to all editors
 
 ```bash
 bun ai-toolkit sync
@@ -136,22 +147,22 @@ Sync Summary
 ✓ Sync complete!
 ```
 
-Dat is het! Je AI editors lezen nu automatisch de gegenereerde bestanden.
+That's it! Your AI editors now automatically read the generated files.
 
 ---
 
-## Configuratie
+## Configuration
 
-### Volledige `ai-toolkit.yaml` referentie
+### Full `ai-toolkit.yaml` reference
 
 ```yaml
 version: "1.0"
 
-# Template inheritance (optioneel)
+# Template inheritance (optional)
 extends:
   - stacks/nextjs
 
-# Welke editors zijn actief
+# Which editors are active (boolean or object syntax)
 editors:
   cursor: true
   windsurf: true
@@ -167,39 +178,51 @@ editors:
   antigravity: false
   bolt: false
   warp: false
+  # Object syntax (optional):
+  # cursor:
+  #   enabled: true
+  #   output_path: custom/path
 
-# Project metadata (verschijnt in entry points)
+# Project metadata (appears in entry points)
 metadata:
-  name: "Mijn Project"
-  description: "Beschrijving voor AI editors"
+  name: "My Project"
+  description: "Description for AI editors"
 
-# Tech stack (verschijnt in entry points)
+# Tech stack (appears in entry points)
 tech_stack:
   language: typescript
   framework: nextjs
   database: supabase
   runtime: node
 
-# MCP servers (gedistribueerd naar editors die het ondersteunen)
+# MCP servers (distributed to editors that support them)
 mcp_servers:
   - name: filesystem
     command: npx
     args: ["-y", "@modelcontextprotocol/server-filesystem", "./src"]
     enabled: true
 
-# Editor settings (genereert .editorconfig + .vscode/settings.json)
+# Editor settings (generates .editorconfig + .vscode/settings.json)
 settings:
   indent_size: 2
   indent_style: space
   format_on_save: true
 
-# Ignore patterns (voor templates)
+# Ignore patterns (for templates)
 ignore_patterns:
   - node_modules/
   - .next/
   - dist/
 
-# Custom editors (plugin systeem)
+# Content sources (shared rules across projects)
+content_sources:
+  - type: local
+    path: ../shared-ai-rules
+    include: [rules, skills, workflows]  # optional filter
+  - type: package
+    name: "@my-org/ai-rules"
+
+# Custom editors (plugin system)
 custom_editors:
   - name: my-editor
     rules_dir: .my-editor/rules
@@ -209,109 +232,160 @@ custom_editors:
 
 ---
 
-## Content schrijven
+## Writing Content
 
-### Rules (projectregels)
+### Rules (project rules)
 
-Bestanden in `.ai-content/rules/` worden naar **alle** enabled editors gestuurd.
+Files in `.ai-content/rules/` are synced to **all** enabled editors.
 
 ```markdown
 <!-- .ai-content/rules/code-style.md -->
 # Code Style
 
-## Naamgeving
-- Gebruik camelCase voor variabelen en functies
-- Gebruik PascalCase voor klassen en componenten
-- Gebruik UPPER_SNAKE_CASE voor constanten
+## Naming
+- Use camelCase for variables and functions
+- Use PascalCase for classes and components
+- Use UPPER_SNAKE_CASE for constants
 
-## Bestanden
-- Eén component per bestand
-- Bestandsnaam = componentnaam (PascalCase)
+## Files
+- One component per file
+- Filename = component name (PascalCase)
 
 ## Error handling
-- Gebruik altijd try/catch bij async operaties
-- Log errors met context (welke functie, welke input)
+- Always use try/catch for async operations
+- Log errors with context (which function, which input)
 ```
 
-### Skills (AI commando's)
+### Skills (AI commands)
 
-Bestanden in `.ai-content/skills/` worden naar editors gestuurd als herbruikbare commando's.
+Files in `.ai-content/skills/` are synced to editors as reusable commands.
 
 ```markdown
 <!-- .ai-content/skills/refactor.md -->
 # Refactor
 
-## Doel
-Refactor code naar betere structuur zonder functionaliteit te wijzigen.
+## Goal
+Refactor code to a better structure without changing functionality.
 
-## Proces
-1. Analyseer de huidige code
-2. Identificeer code smells
-3. Pas refactoring patterns toe
-4. Verifieer dat tests nog slagen
+## Process
+1. Analyze the current code
+2. Identify code smells
+3. Apply refactoring patterns
+4. Verify that tests still pass
 
 ## Checklist
-- [ ] Geen nieuwe bugs geïntroduceerd
-- [ ] Tests slagen nog
-- [ ] Code is leesbaarder
+- [ ] No new bugs introduced
+- [ ] Tests still pass
+- [ ] Code is more readable
 ```
 
-### Workflows (dev processen)
+### Workflows (dev processes)
 
-Bestanden in `.ai-content/workflows/` worden alleen naar editors gestuurd die workflows ondersteunen (Windsurf, Kiro).
+Files in `.ai-content/workflows/` are only synced to editors that support workflows (Windsurf, Kiro).
 
 ```markdown
 <!-- .ai-content/workflows/create-feature.md -->
 # Create Feature
 
-## Stappen
-1. Maak een nieuwe branch
-2. Schrijf de feature spec
-3. Implementeer de feature
-4. Schrijf tests
-5. Maak een PR
+## Steps
+1. Create a new branch
+2. Write the feature spec
+3. Implement the feature
+4. Write tests
+5. Create a PR
 ```
 
-### Overrides (editor-specifiek)
+### Overrides (editor-specific)
 
-Bestanden in `.ai-content/overrides/{editor-naam}/` overschrijven of voegen toe aan een specifieke editor.
+Files in `.ai-content/overrides/{editor-name}/` override or add content to a specific editor.
 
 ```
 .ai-content/overrides/
 ├── cursor/
-│   └── cursor-specific-rule.md    → alleen naar .cursor/rules/
+│   └── cursor-specific-rule.md    → only to .cursor/rules/
 ├── claude/
-│   └── claude-permissions.md      → alleen naar .claude/rules/
+│   └── claude-permissions.md      → only to .claude/rules/
 └── windsurf/
-    └── windsurf-workflow.md       → alleen naar .windsurf/rules/
+    └── windsurf-workflow.md       → only to .windsurf/rules/
 ```
 
 ---
 
-## Editors instellen
+## Project Context (PROJECT.md)
 
-### Hoe het werkt per editor
+During `init`, `.ai-content/PROJECT.md` is created. This file describes your project and is automatically included in **all entry points** (`.cursorrules`, `.windsurfrules`, `CLAUDE.md`, `AGENTS.md`, etc.).
 
-| Editor | Wat ai-toolkit genereert | Hoe de editor het leest |
-|---|---|---|
-| **Cursor** | `.cursorrules` + `.cursor/rules/*.md` | Automatisch bij openen project |
-| **Windsurf** | `.windsurfrules` + `.windsurf/rules/*.md` | Automatisch bij openen project |
-| **Claude** | `CLAUDE.md` + `.claude/rules/*.md` | Automatisch bij `claude` CLI |
-| **Copilot** | `.github/copilot-instructions.md` + `.github/instructions/*.md` | Automatisch in VS Code |
-| **Codex** | `AGENTS.md` + `.codex/*.md` | Automatisch bij `codex` CLI |
-| **Kiro** | `.kiro/steering/*.md` | Automatisch bij openen project |
+### Template sections
+
+```markdown
+# Project Context
+
+## Overview
+<!-- Describe what this project does -->
+
+## Architecture
+<!-- Describe the high-level architecture -->
+
+## Tech Stack
+<!-- Auto-filled from ai-toolkit.yaml -->
+
+## Directory Structure
+<!-- Describe the key directories -->
+
+## Conventions
+<!-- Project-specific conventions -->
+
+## Key Dependencies
+<!-- Important dependencies and why they were chosen -->
+
+## Development
+<!-- How to run, build, and test -->
+
+## Notes
+<!-- Additional context for AI editors -->
+```
+
+### How it works
+
+- The `Tech Stack` section is automatically populated from `tech_stack:` in `ai-toolkit.yaml`
+- During `sync`, the contents of PROJECT.md are appended after the generated entry point header, separated by `---`
+- PROJECT.md is **only** included if you have actually filled in content (HTML comments are ignored during the check)
+- Fill in this file so every AI editor has immediate context about your project
+
+---
+
+## Editor Setup
+
+### How it works per editor
+
+| Editor | Entry point | Rules dir | Skills/Commands dir | MCP config |
+|---|---|---|---|---|
+| **Cursor** | `.cursorrules` | `.cursor/rules/` | `.cursor/commands/` | `.cursor/mcp.json` |
+| **Windsurf** | `.windsurfrules` | `.windsurf/rules/` | `.windsurf/workflows/` | — |
+| **Claude** | `CLAUDE.md` | `.claude/rules/` | `.claude/skills/` | `.claude/settings.json` |
+| **Kiro** | — | `.kiro/steering/` | `.kiro/specs/workflows/` | `.kiro/settings/mcp.json` |
+| **Trae** | — | `.trae/rules/` | `.trae/skills/` | — |
+| **Gemini** | — | `.gemini/rules/` | `.gemini/skills/` | — |
+| **Copilot** | `.github/copilot-instructions.md` | `.github/instructions/` | `.github/instructions/` | `.vscode/mcp.json` |
+| **Codex** | `AGENTS.md` | `.codex/` | `.codex/skills/` | — |
+| **Aider** | `AGENTS.md` | `.aider/` | — | — |
+| **Roo** | — | `.roo/rules/` | `.roo/skills/` | `.roo/mcp.json` |
+| **KiloCode** | — | `.kilocode/rules/` | `.kilocode/skills/` | `.kilocode/mcp.json` |
+| **Antigravity** | — | `.agent/rules/` | `.agent/skills/` | — |
+| **Bolt** | `.bolt/prompt` | `.bolt/` | — | — |
+| **Warp** | `WARP.md` | `.warp/rules/` | — | — |
 
 ### Dry-run (preview)
 
-Wil je eerst zien wat er zou gebeuren?
+Want to see what would happen first?
 
 ```bash
 bun ai-toolkit sync --dry-run
 ```
 
-### Validatie
+### Validation
 
-Check of je config en content correct zijn:
+Check if your config and content are correct:
 
 ```bash
 bun ai-toolkit validate
@@ -319,13 +393,13 @@ bun ai-toolkit validate
 
 ---
 
-## Templates gebruiken
+## Using Templates
 
-Templates besparen je tijd door standaard tech stack settings mee te geven.
+Templates save you time by providing default tech stack settings.
 
-### Beschikbare templates
+### Available templates
 
-| Template | Taal | Framework | Indent |
+| Template | Language | Framework | Indent |
 |---|---|---|---|
 | `stacks/nextjs` | TypeScript | Next.js | 2 spaces |
 | `stacks/react` | TypeScript | React | 2 spaces |
@@ -336,21 +410,21 @@ Templates besparen je tijd door standaard tech stack settings mee te geven.
 | `stacks/rails` | Ruby | Rails | 2 spaces |
 | `stacks/go-api` | Go | Gin | tabs |
 
-### Gebruik
+### Usage
 
 ```yaml
 # ai-toolkit.yaml
 extends:
   - stacks/nextjs
 
-# Je eigen config overschrijft template waarden:
+# Your own config overrides template values:
 tech_stack:
-  database: supabase  # Voegt toe aan de template
+  database: supabase  # Adds to the template
 ```
 
-### Eigen templates maken
+### Creating custom templates
 
-Maak een YAML bestand in `.ai-content/templates/`:
+Create a YAML file in `.ai-content/templates/`:
 
 ```yaml
 # .ai-content/templates/my-stack.yaml
@@ -364,7 +438,7 @@ settings:
   indent_style: space
 ```
 
-Gebruik het:
+Use it:
 ```yaml
 extends:
   - my-stack
@@ -372,44 +446,71 @@ extends:
 
 ---
 
+## Built-in skill & workflow templates
+
+During `init`, built-in templates are automatically copied to `.ai-content/skills/` and `.ai-content/workflows/`. Existing files are never overwritten.
+
+### Skills (5 templates)
+
+| Template | Description |
+|---|---|
+| `code-review.md` | Structured code review with checklist |
+| `debug-assistant.md` | Step-by-step debugging of issues |
+| `finding-refactor-candidates.md` | Identify code that can be refactored |
+| `refactor.md` | Perform refactoring without changing functionality |
+| `verifying-responsiveness.md` | Verify responsive design |
+
+### Workflows (3 templates)
+
+| Template | Description |
+|---|---|
+| `create-prd.md` | Create a Product Requirements Document |
+| `generate-tasks.md` | Generate tasks from a PRD |
+| `refactor-prd.md` | PRD for a refactoring project |
+
+You can customize or delete these templates. They serve as a starting point.
+
+---
+
 ## Custom editors
 
-Heb je een editor die niet ingebouwd is? Definieer hem in YAML:
+Have an editor that's not built-in? Define it in YAML:
 
 ```yaml
 custom_editors:
   - name: supermaven
     rules_dir: .supermaven/rules
     skills_dir: .supermaven/skills
+    workflows_dir: .supermaven/workflows  # optional
     entry_point: SUPERMAVEN.md
     mcp_config_path: .supermaven/mcp.json
-    file_naming: flat  # of 'subdirectory'
+    file_naming: flat  # or 'subdirectory'
 
 editors:
-  supermaven: true  # Vergeet niet te activeren!
+  supermaven: true  # Don't forget to enable it!
 ```
 
 ---
 
-## Content Sources (gedeelde rules tussen projecten)
+## Content Sources (shared rules across projects)
 
-Met `content_sources` kun je rules, skills en workflows delen tussen meerdere projecten. Zo hoef je ze maar één keer te schrijven.
+With `content_sources` you can share rules, skills, and workflows across multiple projects. Write them once, use them everywhere.
 
-### Optie A: Lokaal pad
+### Option A: Local path
 
-Ideaal als je projecten op dezelfde machine staan (of in een monorepo):
+Ideal when your projects are on the same machine (or in a monorepo):
 
 ```yaml
 content_sources:
   - type: local
-    path: ../shared-ai-rules        # relatief pad
+    path: ../shared-ai-rules        # relative path
   - type: local
-    path: /Users/team/ai-standards  # absoluut pad
+    path: /Users/team/ai-standards  # absolute path
 ```
 
-De resolver zoekt automatisch naar een `.ai-content/` map in het opgegeven pad. Als die niet bestaat, wordt het pad zelf als content root gebruikt.
+The resolver automatically looks for an `.ai-content/` or `templates/` directory in the given path. If neither exists, the path itself is used as the content root.
 
-**Mapstructuur van de gedeelde bron:**
+**Directory structure of the shared source:**
 ```
 shared-ai-rules/
 ├── rules/
@@ -421,48 +522,108 @@ shared-ai-rules/
     └── deploy.md
 ```
 
-### Optie B: npm package
+### Option B: npm package
 
-Ideaal voor teams die rules willen delen via een private of public npm registry:
+Ideal for teams that want to share rules via a private or public npm registry:
 
 ```yaml
 content_sources:
   - type: package
-    name: "@mijn-org/ai-rules"
+    name: "@my-org/ai-rules"
 ```
 
-Installeer het package eerst:
+Install the package first:
 ```bash
-bun add -d @mijn-org/ai-rules
+bun add -d @my-org/ai-rules
 ```
 
-De resolver zoekt in het package naar `.ai-content/`, `content/`, of de package root.
+The resolver looks in the package for `.ai-content/`, `content/`, or uses the package root as a fallback.
 
-### Filteren op categorie
+### Filtering by category
 
-Standaard worden `rules`, `skills` en `workflows` allemaal geïmporteerd. Je kunt filteren:
+By default, `rules`, `skills`, and `workflows` are all imported. You can filter:
 
 ```yaml
 content_sources:
   - type: local
     path: ../shared-rules
-    include: [rules]           # alleen rules, geen skills/workflows
+    include: [rules]           # only rules, no skills/workflows
   - type: package
-    name: "@mijn-org/ai-skills"
+    name: "@my-org/ai-skills"
     include: [skills, workflows]
 ```
 
-### Prioriteit
+### Priority
 
-**Lokale content wint altijd.** Als je project een `code-style.md` heeft in `.ai-content/rules/` en de externe bron ook, wordt de lokale versie gebruikt. Zo kun je gedeelde rules per project overschrijven.
+**Local content always wins.** If your project has a `code-style.md` in `.ai-content/rules/` and the external source also has one, the local version is used. This way you can override shared rules per project.
+
+---
+
+## SSOT Synchronization
+
+When you use `content_sources`, ai-toolkit keeps your local content and the shared SSOT (Single Source of Truth) automatically in sync.
+
+### Auto-promote
+
+During every `sync`, **new** local files are automatically promoted to the SSOT. If you create a new file in `.ai-content/skills/` and it doesn't exist in the SSOT yet, it is automatically copied there.
+
+### Diff detection
+
+After the sync, ai-toolkit checks whether local files differ from the SSOT version. If there are differences, you get an interactive prompt:
+
+```
+⚠ skills/code-review.md — local is newer. Update SSOT? (y/n)
+⚠ rules/security.md — SSOT is newer. Update local? (y/n)
+```
+
+The direction is determined based on the file modification date (mtime).
+
+### Orphan detection
+
+If a file exists in the SSOT but has been removed locally, this is reported:
+
+```
+⚠ skills/old-skill.md — remove from SSOT? (y/n)
+```
+
+### Cleanup of orphaned files
+
+During every sync, **orphaned auto-generated files** are automatically removed from editor directories. Only files with the `AUTO-GENERATED` marker that are no longer part of the current sync are cleaned up. Manually created files are never removed.
+
+---
+
+## Promote Command
+
+With `promote` you can manually copy a local file to the shared SSOT:
+
+```bash
+# Promote a skill
+bun ai-toolkit promote skills/my-new-skill.md
+
+# Promote a rule
+bun ai-toolkit promote rules/my-rule.md
+
+# Overwrite if it already exists
+bun ai-toolkit promote skills/my-skill.md --force
+```
+
+### Requirements
+
+- A `content_sources` entry of type `local` must be configured in `ai-toolkit.yaml`
+- The path must start with `skills/`, `workflows/`, or `rules/`
+- You can also provide the full path: `.ai-content/skills/my-skill.md`
+
+### Where does it go?
+
+The file is copied to `<content_source_path>/templates/<category>/<filename>`.
 
 ---
 
 ## MCP servers
 
-MCP (Model Context Protocol) servers worden automatisch gedistribueerd naar editors die het ondersteunen:
+MCP (Model Context Protocol) servers are automatically distributed to editors that support them:
 
-| Editor | MCP config locatie |
+| Editor | MCP config location |
 |---|---|
 | Cursor | `.cursor/mcp.json` |
 | Claude | `.claude/settings.json` |
@@ -471,7 +632,7 @@ MCP (Model Context Protocol) servers worden automatisch gedistribueerd naar edit
 | Roo | `.roo/mcp.json` |
 | KiloCode | `.kilocode/mcp.json` |
 
-### Configuratie
+### Configuration
 
 ```yaml
 mcp_servers:
@@ -492,7 +653,7 @@ mcp_servers:
 
 ## Editor settings
 
-De `settings:` sectie genereert automatisch `.editorconfig` en `.vscode/settings.json`:
+The `settings:` section automatically generates `.editorconfig` and `.vscode/settings.json`:
 
 ```yaml
 settings:
@@ -501,10 +662,11 @@ settings:
   format_on_save: true
 ```
 
-Genereert:
+Generates:
 
 **`.editorconfig`:**
 ```ini
+# Generated by ai-toolkit
 root = true
 
 [*]
@@ -527,9 +689,9 @@ insert_final_newline = true
 
 ---
 
-## Monorepo setup
+## Monorepo Setup
 
-Voor monorepos met meerdere projecten:
+For monorepos with multiple projects:
 
 ```
 my-monorepo/
@@ -537,33 +699,46 @@ my-monorepo/
 ├── .ai-content/
 ├── packages/
 │   ├── frontend/
-│   │   ├── ai-toolkit.yaml  # Frontend-specifieke config
+│   │   ├── ai-toolkit.yaml  # Frontend-specific config
 │   │   └── .ai-content/
 │   └── backend/
-│       ├── ai-toolkit.yaml  # Backend-specifieke config
+│       ├── ai-toolkit.yaml  # Backend-specific config
 │       └── .ai-content/
 ```
 
-Sync alles in één keer:
+Sync everything at once:
 
 ```bash
 bun ai-toolkit sync-all
 ```
 
-Dit vindt automatisch alle `ai-toolkit.yaml` bestanden tot 3 niveaus diep.
+This automatically finds all `ai-toolkit.yaml` files up to 3 levels deep.
 
 ---
 
-## CI/CD integratie
+## CI/CD Integration
 
-### npm scripts
+### npm scripts (automatically added by `init`)
+
+`ai-toolkit init` automatically adds the following scripts to your `package.json`:
 
 ```json
 {
   "scripts": {
-    "ai:sync": "bun ai-toolkit sync",
-    "ai:validate": "bun ai-toolkit validate",
-    "precommit": "bun ai-toolkit sync"
+    "sync": "ai-toolkit sync",
+    "sync:dry": "ai-toolkit sync --dry-run",
+    "sync:watch": "ai-toolkit watch"
+  }
+}
+```
+
+You can of course add extra scripts:
+
+```json
+{
+  "scripts": {
+    "ai:validate": "ai-toolkit validate",
+    "precommit": "ai-toolkit sync"
   }
 }
 ```
@@ -592,64 +767,81 @@ jobs:
           fi
 ```
 
-### Husky pre-commit hook
+### Pre-commit hook (automatic)
+
+`ai-toolkit init` automatically installs a `.git/hooks/pre-commit` hook that on every commit:
+1. Runs `ai-toolkit sync`
+2. Adds all generated files to the commit (`git add`)
+
+If a pre-commit hook already exists, the ai-toolkit hook is appended to it (not overwritten).
+
+### Husky pre-commit hook (alternative)
+
+If you use Husky, you can use this instead:
 
 ```bash
 # .husky/pre-commit
 bun ai-toolkit sync
-git add .cursorrules .windsurfrules CLAUDE.md .cursor/ .windsurf/ .claude/
+git add .cursorrules .windsurfrules CLAUDE.md AGENTS.md WARP.md .cursor/ .windsurf/ .claude/ .kiro/ .trae/ .gemini/ .github/ .codex/ .aider/ .roo/ .kilocode/ .agent/ .bolt/ .warp/
 ```
 
 ---
 
-## Commando referentie
+## Command Reference
 
-| Commando | Beschrijving |
+| Command | Description |
 |---|---|
-| `ai-toolkit init` | Initialiseer project (maakt config + content dirs) |
-| `ai-toolkit init --force` | Herinitialiseer (overschrijft bestaande config) |
-| `ai-toolkit sync` | Sync content naar alle enabled editors |
-| `ai-toolkit sync --dry-run` | Preview wat er zou veranderen |
-| `ai-toolkit validate` | Valideer config en content |
-| `ai-toolkit watch` | Auto-sync bij wijzigingen |
-| `ai-toolkit sync-all` | Sync alle projecten in een monorepo |
+| `ai-toolkit init` | Initialize project (creates config, content dirs, scripts, hook) |
+| `ai-toolkit init --force` | Reinitialize (overwrites existing config) |
+| `ai-toolkit sync` | Sync content to all enabled editors |
+| `ai-toolkit sync --dry-run` | Preview what would change |
+| `ai-toolkit validate` | Validate config and content |
+| `ai-toolkit watch` | Auto-sync on changes (native fs.watch) |
+| `ai-toolkit sync-all` | Sync all projects in a monorepo |
 | `ai-toolkit sync-all --dry-run` | Preview monorepo sync |
+| `ai-toolkit promote <file>` | Promote a local file to the shared SSOT |
+| `ai-toolkit promote <file> --force` | Promote and overwrite if it already exists |
 
 ---
 
-## Veelgestelde vragen
+## Frequently Asked Questions
 
-### Moet ik de gegenereerde bestanden committen?
+### Should I commit the generated files?
 
-**Nee.** ai-toolkit voegt ze automatisch toe aan `.gitignore`. De source of truth is `.ai-content/` — die commit je wel.
+**That depends on your setup.** ai-toolkit supports both workflows:
 
-### Kan ik handmatig bestanden aanpassen in `.cursor/rules/`?
+- **With pre-commit hook (default):** The automatically installed hook runs `sync` and adds generated files to the commit. This way they are always up-to-date in your repo.
+- **With .gitignore:** ai-toolkit adds generated paths to a managed block in `.gitignore`. If you don't use the pre-commit hook, the files are ignored.
 
-**Niet doen.** Bestanden met de `AUTO-GENERATED` marker worden overschreven bij de volgende sync. Gebruik in plaats daarvan `.ai-content/overrides/cursor/` voor editor-specifieke content.
+The source of truth is always `.ai-content/` — you commit that regardless.
 
-### Hoe voeg ik een nieuwe regel toe?
+### Can I manually edit files in `.cursor/rules/`?
 
-1. Maak een `.md` bestand in `.ai-content/rules/`
-2. Draai `bun ai-toolkit sync`
-3. Klaar — het bestand is nu in alle editors beschikbaar
+**Don't.** Files with the `AUTO-GENERATED` marker are overwritten on the next sync. Use `.ai-content/overrides/cursor/` for editor-specific content instead.
 
-### Hoe werkt template inheritance?
+### How do I add a new rule?
 
-Templates worden gemerged met je project config. Je project config wint altijd:
+1. Create a `.md` file in `.ai-content/rules/`
+2. Run `bun ai-toolkit sync`
+3. Done — the file is now available in all editors
+
+### How does template inheritance work?
+
+Templates are merged with your project config. Your project config always wins:
 
 ```
 Template: tech_stack.language = "typescript"
 Project:  tech_stack.database = "supabase"
-Resultaat: language = "typescript", database = "supabase"
+Result:   language = "typescript", database = "supabase"
 ```
 
-### Kan ik meerdere templates combineren?
+### Can I combine multiple templates?
 
-Ja:
+Yes:
 ```yaml
 extends:
   - stacks/nextjs
   - my-custom-template
 ```
 
-Templates worden in volgorde gemerged, later overschrijft eerder.
+Templates are merged in order, later overrides earlier.

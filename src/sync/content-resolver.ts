@@ -39,7 +39,7 @@ export async function resolveContentSources(
       const label = source.type === 'local' ? source.path! : source.name!;
 
       for (const category of categories) {
-        const dirName = categoryToDir(category);
+        const dirName = CATEGORY_DIRS[category];
         const contentDir = join(sourceRoot, dirName);
         const exists = await fileExists(contentDir);
 
@@ -97,13 +97,13 @@ export async function resolveSourcePath(
       return null;
     }
 
-    return resolvePackagePath(projectRoot, source.name);
+    return await resolvePackagePath(projectRoot, source.name);
   }
 
   return null;
 }
 
-function resolvePackagePath(projectRoot: string, packageName: string): string | null {
+async function resolvePackagePath(projectRoot: string, packageName: string): Promise<string | null> {
   try {
     // Use createRequire from the project root to find the package
     const require = createRequire(join(projectRoot, 'package.json'));
@@ -114,17 +114,10 @@ function resolvePackagePath(projectRoot: string, packageName: string): string | 
     const candidates = [
       join(packageRoot, '.ai-content'),
       join(packageRoot, 'content'),
-      packageRoot,
     ];
 
     for (const candidate of candidates) {
-      // We'll check existence synchronously via try/catch
-      try {
-        require.resolve(candidate);
-        return candidate;
-      } catch {
-        // Try next candidate
-      }
+      if (await fileExists(candidate)) return candidate;
     }
 
     return packageRoot;
@@ -134,13 +127,8 @@ function resolvePackagePath(projectRoot: string, packageName: string): string | 
   }
 }
 
-function categoryToDir(category: ContentCategory): string {
-  switch (category) {
-    case 'rules':
-      return RULES_DIR;
-    case 'skills':
-      return SKILLS_DIR;
-    case 'workflows':
-      return WORKFLOWS_DIR;
-  }
-}
+const CATEGORY_DIRS: Record<ContentCategory, string> = {
+  rules: RULES_DIR,
+  skills: SKILLS_DIR,
+  workflows: WORKFLOWS_DIR,
+};

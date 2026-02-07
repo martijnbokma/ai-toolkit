@@ -1,4 +1,5 @@
 import { readFile, writeFile, mkdir, readdir, unlink, access, constants } from 'fs/promises';
+import { accessSync, constants as fsConstants } from 'fs';
 import { join, dirname, relative, extname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import type { ContentFile } from '../core/types.js';
@@ -72,8 +73,17 @@ export async function findMarkdownFiles(
 export function getPackageRoot(): string {
   try {
     const currentFile = fileURLToPath(import.meta.url);
-    // src/utils/file-ops.ts → go up 3 levels to package root
-    return join(dirname(currentFile), '..', '..');
+    let dir = dirname(currentFile);
+    // Walk up until we find package.json (works from both src/ and dist/)
+    for (let i = 0; i < 5; i++) {
+      try {
+        accessSync(join(dir, 'package.json'), fsConstants.R_OK);
+        return dir;
+      } catch {
+        dir = dirname(dir);
+      }
+    }
+    return dirname(currentFile);
   } catch {
     return process.cwd();
   }

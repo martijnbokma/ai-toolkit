@@ -54,6 +54,7 @@
   "author": "Martijn Bokma",
   "license": "MIT",
   "dependencies": {
+    "@clack/prompts": "^1.0.0",
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
     "js-yaml": "^4.1.1",

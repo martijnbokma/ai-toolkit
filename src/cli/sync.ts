@@ -3,6 +3,7 @@ import { unlink, copyFile } from 'fs/promises';
 import type { SyncOptions } from '../core/types.js';
 import { loadConfig } from '../core/config-loader.js';
 import { runSync } from '../sync/syncer.js';
+import { removeOrphanFile } from '../sync/cleanup.js';
 import { log, createSpinner } from '../utils/logger.js';
 
 function askYesNo(question: string): Promise<boolean> {
@@ -34,6 +35,23 @@ export async function runSyncCommand(
 
     if (result.removed.length > 0) {
       log.warn(`Removed: ${result.removed.length} orphaned file(s)`);
+    }
+
+    // Handle pending orphans with user confirmation
+    if (result.pendingOrphans.length > 0 && !options.dryRun) {
+      console.log('');
+      log.warn(`Found ${result.pendingOrphans.length} orphaned file(s) — no longer in .ai-content/:`);
+      for (const orphan of result.pendingOrphans) {
+        const confirmed = await askYesNo(`  🗑 ${orphan.relativePath} — remove? (y/n) `);
+        if (confirmed) {
+          const success = await removeOrphanFile(orphan);
+          if (success) {
+            result.removed.push(orphan.relativePath);
+          }
+        } else {
+          log.dim(`  Skipped ${orphan.relativePath}`);
+        }
+      }
     }
 
     if (result.errors.length > 0) {

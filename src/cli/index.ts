@@ -4,7 +4,7 @@ import { runSyncCommand } from './sync.js';
 import { runValidateCommand } from './validate.js';
 import { runWatchCommand } from './watch.js';
 import { runMonorepoSyncCommand } from './sync-all.js';
-import { runPromote, runPromoteForce } from './promote.js';
+import { runPromote } from './promote.js';
 
 const program = new Command();
 
@@ -59,11 +59,7 @@ program
   .argument('<file>', 'Path to the file to promote (e.g. skills/my-skill.md)')
   .option('-f, --force', 'Overwrite if already exists in SSOT', false)
   .action(async (file, options) => {
-    if (options.force) {
-      await runPromoteForce(process.cwd(), file);
-    } else {
-      await runPromote(process.cwd(), file);
-    }
+    await runPromote(process.cwd(), file, options.force);
   });
 
 program.parse();

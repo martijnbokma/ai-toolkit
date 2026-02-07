@@ -16,6 +16,7 @@ export async function runMonorepoSync(
     skipped: [],
     removed: [],
     errors: [],
+    pendingOrphans: [],
     ssotOrphans: [],
     ssotDiffs: [],
   };

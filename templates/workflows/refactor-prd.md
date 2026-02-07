@@ -11,12 +11,12 @@ Guide an AI assistant in creating a detailed Refactoring Product Requirements Do
 3. **Ask Clarifying Questions & Provide Advice:** Ask 3-5 critical questions to understand the scope and risks. Provide options in letter/number lists. **MANDATORY:** For each question, indicate which option is "Recommended" based on best practices (DRY, SSOT, modularity) and briefly explain why.
    - _Example: "What is the primary driver? A. Technical debt (Recommended — improves maintainability), B. Performance"_
 4. **Generate R-PRD:** Use the structure below, integrating the project's architecture and conventions.
-5. **Save R-PRD:** Save as `prd-refactor-[module-name].md`.
+5. **Save R-PRD:** Save as `docs/prd-refactor-[module-name].md` (create the `docs/` directory if it doesn't exist).
 6. **Generate Tasks from R-PRD:** **MANDATORY** — Always generate a task list immediately after saving the R-PRD. This step is never optional.
    - Use the `generate-tasks` workflow with the saved R-PRD as input
    - Treat the R-PRD as the "requirements documentation"
    - Follow the two-phase process: first generate parent tasks, wait for user "Go" confirmation, then generate sub-tasks
-   - Save the task list as `tasks-refactor-[module-name].md`
+   - Save the task list as `docs/tasks-refactor-[module-name].md`
 7. **Ask to Start First Task:** After the task list is complete, ask the user: "Shall we start with the first task?" Wait for confirmation before proceeding.
 
 ## Core Principles
@@ -112,4 +112,4 @@ To reduce user decision stress and ensure architectural consistency, the AI must
 ## Output
 
 - **Format:** Markdown (`.md`)
-- **Filename:** `prd-refactor-[module-name].md`
+- **Filename:** `docs/prd-refactor-[module-name].md`

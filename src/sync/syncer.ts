@@ -22,13 +22,15 @@ import {
 } from '../utils/file-ops.js';
 import { log } from '../utils/logger.js';
 import { updateGitignore } from './gitignore.js';
-import { cleanupOrphans } from './cleanup.js';
+import { detectOrphans } from './cleanup.js';
 import { syncEditorSettings } from './settings-syncer.js';
 import { resolveContentSources, resolveSourcePath } from './content-resolver.js';
 import { detectSsotOrphans, detectSsotDiffs } from './ssot-detector.js';
 import { autoPromoteContent } from './auto-promoter.js';
 import { generateMCPConfigs } from './mcp-generator.js';
 import { generateEntryPoints } from './entry-points.js';
+
+type ContentType = 'rules' | 'skills' | 'workflows';
 
 export async function runSync(
   projectRoot: string,
@@ -41,6 +43,7 @@ export async function runSync(
     skipped: [],
     removed: [],
     errors: [],
+    pendingOrphans: [],
     ssotOrphans: [],
     ssotDiffs: [],
   };
@@ -71,15 +74,15 @@ export async function runSync(
   }
 
   // 2. Resolve external content sources
-  let externalRules: ContentFile[] = [];
-  let externalSkills: ContentFile[] = [];
-  let externalWorkflows: ContentFile[] = [];
+  let external: Record<ContentType, ContentFile[]> = {
+    rules: [],
+    skills: [],
+    workflows: [],
+  };
 
   if (config.content_sources && config.content_sources.length > 0) {
-    const external = await resolveContentSources(projectRoot, config.content_sources);
-    externalRules = external.rules;
-    externalSkills = external.skills;
-    externalWorkflows = external.workflows;
+    const resolved = await resolveContentSources(projectRoot, config.content_sources);
+    external = resolved;
   }
 
   // 2b. Auto-promote new local content to SSOT
@@ -94,91 +97,63 @@ export async function runSync(
     }
   }
 
-  // 3. Sync rules (external first, then local — local wins on name conflict)
-  const rulesDir = join(contentDir, RULES_DIR);
-  const localRules = await findMarkdownFiles(rulesDir, rulesDir);
-  const localRuleNames = new Set(localRules.map((r) => r.name));
-  const rules = [
-    ...externalRules.filter((r) => !localRuleNames.has(r.name)),
-    ...localRules,
+  // 3. Sync content types (rules, skills, workflows)
+  const contentTypes: Array<{ type: ContentType; dir: string; filterAdapters?: boolean }> = [
+    { type: 'rules', dir: RULES_DIR },
+    { type: 'skills', dir: SKILLS_DIR },
+    { type: 'workflows', dir: WORKFLOWS_DIR, filterAdapters: true },
   ];
-  if (rules.length > 0) {
-    log.info(`Found ${rules.length} rule(s)${externalRules.length > 0 ? ` (${externalRules.filter((r) => !localRuleNames.has(r.name)).length} external)` : ''}`);
-    for (const rule of rules) {
-      await syncContentToEditors(projectRoot, rule, 'rules', adapters, config, result, dryRun);
-    }
+
+  for (const { type, dir, filterAdapters } of contentTypes) {
+    await mergeAndSyncContent(
+      projectRoot,
+      contentDir,
+      dir,
+      type,
+      external[type],
+      filterAdapters ? adapters.filter((a) => a.directories[type]) : adapters,
+      config,
+      result,
+      dryRun,
+    );
   }
 
-  // 4. Sync skills (external first, then local — local wins on name conflict)
-  const skillsDir = join(contentDir, SKILLS_DIR);
-  const localSkills = await findMarkdownFiles(skillsDir, skillsDir);
-  const localSkillNames = new Set(localSkills.map((s) => s.name));
-  const skills = [
-    ...externalSkills.filter((s) => !localSkillNames.has(s.name)),
-    ...localSkills,
-  ];
-  if (skills.length > 0) {
-    log.info(`Found ${skills.length} skill(s)${externalSkills.length > 0 ? ` (${externalSkills.filter((s) => !localSkillNames.has(s.name)).length} external)` : ''}`);
-    for (const skill of skills) {
-      await syncContentToEditors(projectRoot, skill, 'skills', adapters, config, result, dryRun);
-    }
-  }
-
-  // 5. Sync workflows (only to editors that support them)
-  const workflowsDir = join(contentDir, WORKFLOWS_DIR);
-  const localWorkflows = await findMarkdownFiles(workflowsDir, workflowsDir);
-  const localWorkflowNames = new Set(localWorkflows.map((w) => w.name));
-  const workflows = [
-    ...externalWorkflows.filter((w) => !localWorkflowNames.has(w.name)),
-    ...localWorkflows,
-  ];
-  if (workflows.length > 0) {
-    log.info(`Found ${workflows.length} workflow(s)${externalWorkflows.length > 0 ? ` (${externalWorkflows.filter((w) => !localWorkflowNames.has(w.name)).length} external)` : ''}`);
-    const workflowAdapters = adapters.filter((a) => a.directories.workflows);
-    for (const workflow of workflows) {
-      await syncContentToEditors(
-        projectRoot,
-        workflow,
-        'workflows',
-        workflowAdapters,
-        config,
-        result,
-        dryRun,
-      );
-    }
-  }
-
-  // 5. Apply editor-specific overrides
+  // 4. Apply editor-specific overrides
   await syncOverrides(projectRoot, adapters, result, dryRun);
 
-  // 6. Generate entry points
+  // 5. Generate entry points
   await generateEntryPoints(projectRoot, adapters, config, result, dryRun);
 
-  // 7. Generate MCP configs
+  // 6. Generate MCP configs
   if (config.mcp_servers && config.mcp_servers.length > 0) {
     await generateMCPConfigs(projectRoot, adapters, config, result, dryRun);
   }
 
-  // 8. Sync editor settings (.editorconfig, .vscode/settings.json)
+  // 7. Sync editor settings (.editorconfig, .vscode/settings.json)
   if (config.settings) {
     const settingsFiles = await syncEditorSettings(projectRoot, config, dryRun);
     result.synced.push(...settingsFiles);
   }
 
-  // 9. Cleanup orphaned files
-  if (!dryRun) {
-    const removedFiles = await cleanupOrphans(projectRoot, adapters, result);
-    result.removed.push(...removedFiles);
+  // 8. Detect orphaned files (removal is handled by CLI with user confirmation)
+  const orphans = await detectOrphans(projectRoot, adapters, result);
+  if (orphans.length > 0) {
+    result.pendingOrphans = orphans;
+    if (dryRun) {
+      for (const orphan of orphans) {
+        log.dryRun('would remove orphan', orphan.relativePath);
+      }
+    }
   }
 
-  // 10. Update .gitignore
+  // 9. Update .gitignore
   if (!dryRun) {
     await updateGitignore(projectRoot, adapters);
   } else {
     log.dryRun('would update', '.gitignore');
   }
 
-  // 11. Detect SSOT orphans and diffs (shown after summary by CLI)
+  // 10. Detect SSOT orphans and diffs (shown after summary by CLI)
   if (ssotRoot) {
     result.ssotOrphans = await detectSsotOrphans(contentDir, ssotRoot);
     result.ssotDiffs = await detectSsotDiffs(contentDir, ssotRoot);
@@ -187,10 +162,39 @@ export async function runSync(
   return result;
 }
 
+async function mergeAndSyncContent(
+  projectRoot: string,
+  contentDir: string,
+  dir: string,
+  type: ContentType,
+  externalFiles: ContentFile[],
+  adapters: EditorAdapter[],
+  config: ToolkitConfig,
+  result: SyncResult,
+  dryRun: boolean,
+): Promise<void> {
+  const localDir = join(contentDir, dir);
+  const localFiles = await findMarkdownFiles(localDir, localDir);
+  const localNames = new Set(localFiles.map((f) => f.name));
+  const merged = [
+    ...externalFiles.filter((f) => !localNames.has(f.name)),
+    ...localFiles,
+  ];
+
+  if (merged.length === 0) return;
+
+  const externalCount = externalFiles.filter((f) => !localNames.has(f.name)).length;
+  log.info(`Found ${merged.length} ${type}${externalCount > 0 ? ` (${externalCount} external)` : ''}`);
+
+  for (const file of merged) {
+    await syncContentToEditors(projectRoot, file, type, adapters, config, result, dryRun);
+  }
+}
+
 async function syncContentToEditors(
   projectRoot: string,
   file: ContentFile,
-  type: 'rules' | 'skills' | 'workflows',
+  type: ContentType,
   adapters: EditorAdapter[],
   config: ToolkitConfig,
   result: SyncResult,
