@@ -1,0 +1,17 @@
+version: "1.0"
+
+tech_stack:
+  language: typescript
+  framework: sveltekit
+  runtime: node
+
+settings:
+  indent_size: 2
+  indent_style: space
+
+ignore_patterns:
+  - node_modules/
+  - .svelte-kit/
+  - build/
+  - dist/
+  - .env*

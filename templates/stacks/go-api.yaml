@@ -1,0 +1,17 @@
+version: "1.0"
+
+tech_stack:
+  language: go
+  framework: gin
+  runtime: go
+
+settings:
+  indent_size: 4
+  indent_style: tab
+
+ignore_patterns:
+  - bin/
+  - vendor/
+  - "*.exe"
+  - "*.test"
+  - .env*

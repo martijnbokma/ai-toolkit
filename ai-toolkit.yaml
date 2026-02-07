@@ -1,0 +1,15 @@
+version: "1.0"
+editors:
+  cursor: true
+  windsurf: true
+  claude: true
+  kiro: false
+  trae: false
+  gemini: false
+metadata:
+  name: ""
+  description: ""
+tech_stack:
+  language: ""
+  framework: ""
+  database: ""

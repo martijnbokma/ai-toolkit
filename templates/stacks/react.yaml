@@ -1,0 +1,16 @@
+version: "1.0"
+
+tech_stack:
+  language: typescript
+  framework: react
+  runtime: node
+
+settings:
+  indent_size: 2
+  indent_style: space
+
+ignore_patterns:
+  - node_modules/
+  - dist/
+  - build/
+  - .env*

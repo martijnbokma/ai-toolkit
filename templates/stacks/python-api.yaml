@@ -1,0 +1,18 @@
+version: "1.0"
+
+tech_stack:
+  language: python
+  framework: fastapi
+  runtime: python
+
+settings:
+  indent_size: 4
+  indent_style: space
+
+ignore_patterns:
+  - __pycache__/
+  - .venv/
+  - venv/
+  - dist/
+  - "*.egg-info/"
+  - .env*
