@@ -29,6 +29,7 @@ import { detectSsotOrphans, detectSsotDiffs } from './ssot-detector.js';
 import { autoPromoteContent } from './auto-promoter.js';
 import { generateMCPConfigs } from './mcp-generator.js';
 import { generateEntryPoints } from './entry-points.js';
+import { cleanupRemovedTemplates } from './template-cleanup.js';
 
 type ContentType = 'rules' | 'skills' | 'workflows';
 
@@ -95,6 +96,12 @@ export async function runSync(
         await autoPromoteContent(contentDir, ssotRoot, dryRun);
       }
     }
+  }
+
+  // 2c. Clean up .ai-content files that were removed from templates
+  const removedTemplates = await cleanupRemovedTemplates(contentDir, dryRun);
+  if (removedTemplates.length > 0) {
+    result.removed.push(...removedTemplates);
   }
 
   // 3. Sync content types (rules, skills, workflows)

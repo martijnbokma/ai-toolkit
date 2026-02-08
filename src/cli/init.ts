@@ -11,9 +11,10 @@ import {
   OVERRIDES_DIR,
   PROJECT_CONTEXT_FILE,
 } from '../core/types.js';
-import { configExists } from '../core/config-loader.js';
+import { configExists, loadConfig } from '../core/config-loader.js';
 import { ensureDir, writeTextFile, fileExists, readTextFile, getPackageRoot } from '../utils/file-ops.js';
 import { log, createSpinner } from '../utils/logger.js';
+import { runSync } from '../sync/syncer.js';
 import { DEFAULT_CONFIG, generateProjectContext } from '../sync/project-context.js';
 import { installPreCommitHook } from '../utils/git-hooks.js';
 import { addSyncScripts } from '../utils/package-scripts.js';
@@ -242,28 +243,14 @@ export async function runInit(projectRoot: string, force: boolean): Promise<void
     const configPath = join(projectRoot, CONFIG_FILENAME);
     let finalConfig: Record<string, unknown>;
 
-    if (force && exists) {
-      // --force: preserve existing config, merge with defaults
-      finalConfig = { ...DEFAULT_CONFIG };
-      try {
-        const existingContent = await readTextFile(configPath);
-        const existingConfig = yaml.load(existingContent) as Record<string, unknown>;
-        if (existingConfig && typeof existingConfig === 'object') {
-          finalConfig = { ...DEFAULT_CONFIG, ...existingConfig };
-        }
-      } catch {
-        // Existing config is invalid — overwrite with defaults
-      }
-    } else {
-      // Fresh install: run interactive wizard
-      p.intro('🚀 ai-toolkit setup');
-      const result = await runInteractiveSetup();
-      if (!result) {
-        p.cancel('Setup cancelled.');
-        process.exit(0);
-      }
-      finalConfig = result;
+    // Always run the interactive wizard (fresh or re-init)
+    p.intro(force ? '🔄 ai-toolkit re-init' : '🚀 ai-toolkit setup');
+    const result = await runInteractiveSetup();
+    if (!result) {
+      p.cancel('Setup cancelled.');
+      process.exit(0);
     }
+    finalConfig = result;
 
     // Write config
     const s = p.spinner();
@@ -295,10 +282,27 @@ export async function runInit(projectRoot: string, force: boolean): Promise<void
       await writeTextFile(exampleRulePath, EXAMPLE_RULE);
     }
 
-    // Generate PROJECT.md if it doesn't exist
+    // Generate PROJECT.md
     const projectContextPath = join(contentDir, PROJECT_CONTEXT_FILE);
-    if (!(await fileExists(projectContextPath))) {
-      const projectContext = await generateProjectContext(DEFAULT_CONFIG);
+    const projectContextExists = await fileExists(projectContextPath);
+    let writeProjectContext = !projectContextExists;
+
+    if (projectContextExists && force) {
+      s.stop('');
+      const overwrite = await p.confirm({
+        message: `${CONTENT_DIR}/${PROJECT_CONTEXT_FILE} already exists. Regenerate it?`,
+        initialValue: false,
+      });
+      if (isCancelled(overwrite)) {
+        p.cancel('Setup cancelled.');
+        process.exit(0);
+      }
+      writeProjectContext = !!overwrite;
+      s.start('Setting up project...');
+    }
+
+    if (writeProjectContext) {
+      const projectContext = await generateProjectContext(finalConfig, projectRoot);
       await writeTextFile(projectContextPath, projectContext);
     }
 
@@ -330,7 +334,19 @@ export async function runInit(projectRoot: string, force: boolean): Promise<void
     }
 
     p.note(created.join('\n'), 'Created');
-    p.outro('Run "bun run sync" to distribute to all editors');
+
+    // Auto-run sync to generate editor files immediately
+    s.start('Syncing to editors...');
+    try {
+      const config = await loadConfig(projectRoot);
+      const syncResult = await runSync(projectRoot, config);
+      s.stop(`Synced ${syncResult.synced.length} file(s) to editors`);
+    } catch (syncError) {
+      s.stop('Sync skipped — run "ai-toolkit sync" manually');
+      log.dim(syncError instanceof Error ? syncError.message : String(syncError));
+    }
+
+    p.outro('Done! Your editors are ready.');
   } catch (error) {
     p.cancel(`Failed to initialize: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
