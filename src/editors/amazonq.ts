@@ -1,12 +1,12 @@
 import type { EditorDirectories } from '../core/types.js';
 import { BaseEditorAdapter } from './base-adapter.js';
 
-export class GeminiAdapter extends BaseEditorAdapter {
-  name = 'gemini';
+export class AmazonQAdapter extends BaseEditorAdapter {
+  name = 'amazonq';
   fileNaming: 'flat' | 'subdirectory' = 'flat';
-  entryPoint = 'GEMINI.md';
+  mcpConfigPath = '.amazonq/default.json';
 
   directories: EditorDirectories = {
-    rules: '.gemini',
+    rules: '.amazonq/rules',
   };
 }

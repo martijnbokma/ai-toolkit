@@ -1,12 +1,12 @@
 import type { EditorDirectories } from '../core/types.js';
 import { BaseEditorAdapter } from './base-adapter.js';
 
-export class GeminiAdapter extends BaseEditorAdapter {
-  name = 'gemini';
+export class ZedAdapter extends BaseEditorAdapter {
+  name = 'zed';
   fileNaming: 'flat' | 'subdirectory' = 'flat';
-  entryPoint = 'GEMINI.md';
+  entryPoint = '.rules';
 
   directories: EditorDirectories = {
-    rules: '.gemini',
+    rules: '.zed/rules',
   };
 }

@@ -7,9 +7,9 @@ editors:
   trae: false
   gemini: false
 metadata:
-  name: ""
-  description: ""
+  name: "ai-toolkit"
+  description: "Universal AI toolkit — sync rules, skills, and workflows to 14 AI editors from a single source of truth"
 tech_stack:
-  language: ""
-  framework: ""
-  database: ""
+  language: typescript
+  framework: bun
+  runtime: node

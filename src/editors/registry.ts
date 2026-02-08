@@ -14,6 +14,13 @@ import { KiloCodeAdapter } from './kilocode.js';
 import { AntigravityAdapter } from './antigravity.js';
 import { BoltAdapter } from './bolt.js';
 import { WarpAdapter } from './warp.js';
+import { ReplitAdapter } from './replit.js';
+import { ClineAdapter } from './cline.js';
+import { AmazonQAdapter } from './amazonq.js';
+import { JunieAdapter } from './junie.js';
+import { AugmentAdapter } from './augment.js';
+import { ZedAdapter } from './zed.js';
+import { ContinueAdapter } from './continue.js';
 
 const ALL_ADAPTERS: EditorAdapter[] = [
   new CursorAdapter(),
@@ -30,6 +37,13 @@ const ALL_ADAPTERS: EditorAdapter[] = [
   new AntigravityAdapter(),
   new BoltAdapter(),
   new WarpAdapter(),
+  new ReplitAdapter(),
+  new ClineAdapter(),
+  new AmazonQAdapter(),
+  new JunieAdapter(),
+  new AugmentAdapter(),
+  new ZedAdapter(),
+  new ContinueAdapter(),
 ];
 
 const adapterMap = new Map<string, EditorAdapter>(

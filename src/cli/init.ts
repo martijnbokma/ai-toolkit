@@ -74,6 +74,13 @@ const ALL_EDITORS = [
   { value: 'antigravity', label: 'Antigravity', hint: 'AI editor' },
   { value: 'bolt', label: 'Bolt', hint: 'StackBlitz AI' },
   { value: 'warp', label: 'Warp', hint: 'AI terminal' },
+  { value: 'replit', label: 'Replit', hint: 'Replit Agent' },
+  { value: 'cline', label: 'Cline', hint: 'VS Code extension' },
+  { value: 'amazonq', label: 'Amazon Q', hint: 'AWS AI assistant' },
+  { value: 'junie', label: 'Junie', hint: 'JetBrains AI agent' },
+  { value: 'augment', label: 'Augment Code', hint: 'AI coding assistant' },
+  { value: 'zed', label: 'Zed', hint: 'AI code editor' },
+  { value: 'continue', label: 'Continue', hint: 'open-source AI extension' },
 ];
 
 function isCancelled(value: unknown): value is symbol {

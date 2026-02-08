@@ -3,9 +3,9 @@ import { getAdapter, getAllAdapters, getEnabledAdapters } from '../../src/editor
 import type { ToolkitConfig } from '../../src/core/types.js';
 
 describe('EditorRegistry', () => {
-  it('should return all 14 adapters', () => {
+  it('should return all 21 adapters', () => {
     const adapters = getAllAdapters();
-    expect(adapters.length).toBe(14);
+    expect(adapters.length).toBe(21);
   });
 
   it('should get adapter by name', () => {
@@ -23,7 +23,7 @@ describe('EditorRegistry', () => {
   it('should return all adapters when no editors configured', () => {
     const config: ToolkitConfig = { version: '1.0', editors: {} };
     const enabled = getEnabledAdapters(config);
-    expect(enabled.length).toBe(14);
+    expect(enabled.length).toBe(21);
   });
 
   it('should filter adapters based on config', () => {

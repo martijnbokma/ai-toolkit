@@ -2,27 +2,21 @@ import type { EditorDirectories, ToolkitConfig } from '../core/types.js';
 import { AUTO_GENERATED_MARKER } from '../core/types.js';
 import { BaseEditorAdapter } from './base-adapter.js';
 
-export class WindsurfAdapter extends BaseEditorAdapter {
-  name = 'windsurf';
-  fileNaming: 'flat' = 'flat';
-  entryPoint = '.windsurfrules';
+export class JunieAdapter extends BaseEditorAdapter {
+  name = 'junie';
+  fileNaming: 'flat' | 'subdirectory' = 'flat';
+  entryPoint = '.junie/guidelines.md';
 
   directories: EditorDirectories = {
-    rules: '.windsurf/rules',
-    skills: '.windsurf/skills',
-    workflows: '.windsurf/workflows',
+    rules: '.junie',
   };
-
-  generateFrontmatter(_skillName: string, _description?: string): string {
-    return ['---', 'description: Auto-synced by ai-toolkit', '---', ''].join('\n');
-  }
 
   generateEntryPointContent(config: ToolkitConfig): string {
     const lines: string[] = [AUTO_GENERATED_MARKER, ''];
     const name = config.metadata?.name || 'Project';
     const desc = config.metadata?.description;
 
-    lines.push(`# ${name} — Windsurf Rules`);
+    lines.push(`# ${name} — Junie Guidelines`);
     if (desc) lines.push('', desc);
     lines.push('', '---', '');
 
@@ -38,7 +32,7 @@ export class WindsurfAdapter extends BaseEditorAdapter {
     }
 
     lines.push(
-      'Rules and workflows are managed by ai-toolkit.',
+      'Guidelines are managed by ai-toolkit.',
       'See `.ai-content/` for the source of truth.',
       '',
     );

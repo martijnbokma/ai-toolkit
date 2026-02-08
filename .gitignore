@@ -2,3 +2,17 @@ node_modules/
 dist/
 .DS_Store
 *.log
+
+# >>> ai-toolkit managed (DO NOT EDIT) >>>
+.claude/rules/
+.claude/settings.json
+.claude/skills/
+.cursor/commands/
+.cursor/mcp.json
+.cursor/rules/
+.cursorrules
+.windsurf/rules/
+.windsurf/workflows/
+.windsurfrules
+CLAUDE.md
+# <<< ai-toolkit managed <<<
