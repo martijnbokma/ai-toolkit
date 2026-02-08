@@ -88,39 +88,61 @@ function isCancelled(value: unknown): value is symbol {
   return p.isCancel(value);
 }
 
-async function selectOrCustom(message: string, options: string[]): Promise<string | null> {
+async function selectOrCustom(message: string, options: string[], defaultValue?: string): Promise<string | null> {
+  const isCustom = defaultValue && !options.includes(defaultValue);
+  const hint = defaultValue ? ` (current: ${defaultValue})` : '';
+
   const allOptions = [
     ...options.map((o) => ({ value: o, label: o })),
     { value: '__none__', label: 'None / skip' },
-    { value: '__other__', label: 'Other...' },
+    { value: '__other__', label: isCustom ? `Other... (current: ${defaultValue})` : 'Other...' },
   ];
 
-  const selected = await p.select({ message, options: allOptions });
+  // Pre-select the current value, or __other__ if it's a custom value
+  const initialValue = isCustom ? '__other__' : (defaultValue || undefined);
+
+  const selected = await p.select({ message: message + hint, options: allOptions, initialValue });
   if (isCancelled(selected)) return null;
 
   if (selected === '__none__') return '';
   if (selected === '__other__') {
-    const custom = await p.text({ message: `${message} (custom)`, placeholder: 'Type your answer...' });
+    const custom = await p.text({
+      message: `${message} (custom)`,
+      placeholder: 'Type your answer...',
+      defaultValue: isCustom ? defaultValue : undefined,
+    });
     if (isCancelled(custom)) return null;
     return custom as string;
   }
   return selected as string;
 }
 
-async function runInteractiveSetup(): Promise<Record<string, unknown> | null> {
+interface ExistingConfig {
+  metadata?: { name?: string; description?: string };
+  tech_stack?: { language?: string; framework?: string; database?: string; runtime?: string };
+  editors?: Record<string, boolean>;
+  content_sources?: Array<{ type: string; path?: string; name?: string }>;
+}
+
+async function runInteractiveSetup(existing?: ExistingConfig, projectRoot?: string): Promise<Record<string, unknown> | null> {
   const config: Record<string, unknown> = { version: '1.0' };
+  const prev = existing || {};
+
+  // Use directory name as fallback for project name
+  const dirName = projectRoot ? projectRoot.split('/').pop() : undefined;
 
   // --- 1. Project metadata ---
   const name = await p.text({
     message: 'Project name',
     placeholder: 'my-project',
+    defaultValue: prev.metadata?.name || dirName || undefined,
   });
   if (isCancelled(name)) return null;
 
   const description = await p.text({
     message: 'Description (optional)',
     placeholder: 'A short description of your project',
-    defaultValue: '',
+    defaultValue: prev.metadata?.description || '',
   });
   if (isCancelled(description)) return null;
 
@@ -129,24 +151,24 @@ async function runInteractiveSetup(): Promise<Record<string, unknown> | null> {
   // --- 2. Tech stack (select from common options or type custom) ---
   const language = await selectOrCustom('Language', [
     'TypeScript', 'JavaScript', 'Python', 'Go', 'Rust', 'Java', 'C#', 'PHP', 'Ruby', 'Swift', 'Kotlin',
-  ]);
+  ], prev.tech_stack?.language);
   if (language === null) return null;
 
   const framework = await selectOrCustom('Framework', [
     'Next.js', 'React', 'Vue', 'Svelte', 'Angular', 'Nuxt', 'Remix', 'Astro',
     'Express', 'Fastify', 'Hono', 'Django', 'Flask', 'FastAPI', 'Rails', 'Laravel', 'Spring Boot',
-  ]);
+  ], prev.tech_stack?.framework);
   if (framework === null) return null;
 
   const database = await selectOrCustom('Database', [
     'PostgreSQL', 'MySQL', 'SQLite', 'MongoDB', 'Redis', 'Supabase', 'PlanetScale',
     'DynamoDB', 'Firestore', 'Prisma', 'Drizzle',
-  ]);
+  ], prev.tech_stack?.database);
   if (database === null) return null;
 
   const runtime = await selectOrCustom('Runtime', [
     'Node.js', 'Bun', 'Deno', 'Python', 'Go', 'JVM', '.NET',
-  ]);
+  ], prev.tech_stack?.runtime);
   if (runtime === null) return null;
 
   config.tech_stack = {
@@ -157,10 +179,14 @@ async function runInteractiveSetup(): Promise<Record<string, unknown> | null> {
   };
 
   // --- 3. Editors (multiselect with arrow keys + spacebar) ---
+  const prevEditors = prev.editors
+    ? Object.entries(prev.editors).filter(([, v]) => v).map(([k]) => k)
+    : ['cursor', 'windsurf', 'claude'];
+
   const selectedEditors = await p.multiselect({
     message: 'Which editors do you use? (space to toggle, enter to confirm)',
     options: ALL_EDITORS,
-    initialValues: ['cursor', 'windsurf', 'claude'],
+    initialValues: prevEditors,
     required: true,
   });
   if (isCancelled(selectedEditors)) return null;
@@ -172,6 +198,9 @@ async function runInteractiveSetup(): Promise<Record<string, unknown> | null> {
   config.editors = editors;
 
   // --- 4. Content sources ---
+  const prevSource = prev.content_sources?.[0];
+  const hasPrevSource = !!prevSource;
+
   p.note(
     'A shared content source lets you reuse the same rules, skills,\n' +
     'and workflows across multiple projects. New files you add locally\n' +
@@ -181,7 +210,7 @@ async function runInteractiveSetup(): Promise<Record<string, unknown> | null> {
 
   const wantSsot = await p.confirm({
     message: 'Do you have a shared folder or package with reusable rules/skills?',
-    initialValue: false,
+    initialValue: hasPrevSource,
   });
   if (isCancelled(wantSsot)) return null;
 
@@ -192,6 +221,7 @@ async function runInteractiveSetup(): Promise<Record<string, unknown> | null> {
         { value: 'local', label: 'Local folder', hint: 'a folder on your machine, e.g. ../shared-rules' },
         { value: 'package', label: 'npm package', hint: 'an installed package, e.g. @company/ai-rules' },
       ],
+      initialValue: prevSource?.type || undefined,
     });
     if (isCancelled(sourceType)) return null;
 
@@ -199,18 +229,23 @@ async function runInteractiveSetup(): Promise<Record<string, unknown> | null> {
       const packageName = await p.text({
         message: 'Package name',
         placeholder: '@company/ai-rules',
+        defaultValue: prevSource?.type === 'package' ? prevSource.name : undefined,
       });
       if (isCancelled(packageName)) return null;
       if (packageName) {
         config.content_sources = [{ type: 'package', name: packageName }];
       }
     } else {
+      const prevPath = prevSource?.type === 'local' ? prevSource.path : undefined;
+      const pathOptions = [
+        { value: '../ai-toolkit', label: '../ai-toolkit', hint: 'default' },
+        { value: '__custom__', label: prevPath && prevPath !== '../ai-toolkit' ? `Custom path... (current: ${prevPath})` : 'Custom path...' },
+      ];
+
       const localPath = await p.select({
         message: 'Path to the shared folder',
-        options: [
-          { value: '../ai-toolkit', label: '../ai-toolkit', hint: 'default' },
-          { value: '__custom__', label: 'Custom path...' },
-        ],
+        options: pathOptions,
+        initialValue: prevPath === '../ai-toolkit' ? '../ai-toolkit' : (prevPath ? '__custom__' : undefined),
       });
       if (isCancelled(localPath)) return null;
 
@@ -219,6 +254,7 @@ async function runInteractiveSetup(): Promise<Record<string, unknown> | null> {
         const custom = await p.text({
           message: 'Custom path (relative to this project)',
           placeholder: '../my-shared-rules',
+          defaultValue: prevPath && prevPath !== '../ai-toolkit' ? prevPath : undefined,
         });
         if (isCancelled(custom)) return null;
         finalPath = custom as string;
@@ -243,9 +279,20 @@ export async function runInit(projectRoot: string, force: boolean): Promise<void
     const configPath = join(projectRoot, CONFIG_FILENAME);
     let finalConfig: Record<string, unknown>;
 
+    // Load existing config as defaults for re-init
+    let existing: ExistingConfig | undefined;
+    if (force && exists) {
+      try {
+        const existingContent = await readTextFile(configPath);
+        existing = yaml.load(existingContent) as ExistingConfig;
+      } catch {
+        // Existing config is invalid — start fresh
+      }
+    }
+
     // Always run the interactive wizard (fresh or re-init)
     p.intro(force ? '🔄 ai-toolkit re-init' : '🚀 ai-toolkit setup');
-    const result = await runInteractiveSetup();
+    const result = await runInteractiveSetup(existing, projectRoot);
     if (!result) {
       p.cancel('Setup cancelled.');
       process.exit(0);
