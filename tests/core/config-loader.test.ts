@@ -74,4 +74,13 @@ describe('ConfigLoader', () => {
     expect(config.tech_stack?.framework).toBe('nextjs');
     expect(config.metadata?.name).toBe('Test');
   });
+
+  it('should throw when extended template is not found', async () => {
+    await writeFile(
+      join(testDir, 'ai-toolkit.yaml'),
+      `version: "1.0"\nextends:\n  - stacks/nonexistent\n`,
+    );
+
+    await expect(loadConfig(testDir)).rejects.toThrow('Template "stacks/nonexistent" not found');
+  });
 });

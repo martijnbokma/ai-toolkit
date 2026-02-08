@@ -164,5 +164,39 @@ describe('ContentResolver', () => {
       const names = result.rules.map((r) => r.name).sort();
       expect(names).toEqual(['rule-a', 'rule-b']);
     });
+
+    it('should handle package source that is not installed', async () => {
+      const sources: ContentSource[] = [
+        { type: 'package', name: 'nonexistent-ai-toolkit-package-xyz' },
+      ];
+
+      const result = await resolveContentSources(testDir, sources);
+
+      expect(result.rules).toHaveLength(0);
+      expect(result.skills).toHaveLength(0);
+      expect(result.workflows).toHaveLength(0);
+    });
+
+    it('should handle source with category dir that has no markdown files', async () => {
+      const sourceDir = join(testDir, 'empty-source');
+      await mkdir(join(sourceDir, 'rules'), { recursive: true });
+      // rules dir exists but has no .md files
+
+      const sources: ContentSource[] = [
+        { type: 'local', path: sourceDir, include: ['rules'] },
+      ];
+
+      const result = await resolveContentSources(testDir, sources);
+
+      expect(result.rules).toHaveLength(0);
+    });
+  });
+
+  describe('resolveSourcePath — package type', () => {
+    it('should return null for non-installed package', async () => {
+      const source: ContentSource = { type: 'package', name: 'nonexistent-pkg-xyz-123' };
+      const result = await resolveSourcePath(testDir, source);
+      expect(result).toBeNull();
+    });
   });
 });

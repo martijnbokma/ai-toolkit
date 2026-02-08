@@ -1,10 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { join } from 'path';
 import { mkdtemp, rm, writeFile, mkdir, readFile } from 'fs/promises';
 import { tmpdir } from 'os';
-
-// We test the internal helpers by importing the module and testing the exported functions indirectly.
-// Since runPromote/runPromoteForce call process.exit, we test the core logic via integration.
+import { detectContentType, resolveFilePath } from '../../src/cli/promote.js';
+import { mockProcessExit, suppressConsole } from './helpers.js';
 
 describe('Promote', () => {
   let testDir: string;
@@ -14,7 +13,6 @@ describe('Promote', () => {
     testDir = await mkdtemp(join(tmpdir(), 'ai-toolkit-promote-'));
     sourceDir = join(testDir, 'shared-toolkit');
 
-    // Setup: project with ai-toolkit.yaml pointing to a local content source
     await mkdir(join(testDir, '.ai-content', 'skills'), { recursive: true });
     await mkdir(join(testDir, '.ai-content', 'rules'), { recursive: true });
     await mkdir(join(testDir, '.ai-content', 'workflows'), { recursive: true });
@@ -22,7 +20,6 @@ describe('Promote', () => {
     await mkdir(join(sourceDir, 'templates', 'workflows'), { recursive: true });
     await mkdir(join(sourceDir, 'templates', 'rules'), { recursive: true });
 
-    // Create ai-toolkit.yaml with content_sources
     const config = [
       'version: "1.0"',
       'editors:',
@@ -38,86 +35,7 @@ describe('Promote', () => {
     await rm(testDir, { recursive: true, force: true });
   });
 
-  // Since runPromote calls process.exit on errors, we test the promote logic
-  // by dynamically importing and mocking process.exit.
-  // Instead, we test the underlying behavior by simulating what promote does.
-
-  describe('path resolution logic', () => {
-    it('should resolve .ai-content/ prefixed paths correctly', () => {
-      const CONTENT_DIR = '.ai-content';
-      const filePath = '.ai-content/skills/test-skill.md';
-
-      // Simulates the path resolution in promote.ts
-      let relativePath: string;
-      let absoluteFilePath: string;
-
-      if (filePath.startsWith(CONTENT_DIR + '/')) {
-        relativePath = filePath.slice(CONTENT_DIR.length + 1);
-        absoluteFilePath = join(testDir, filePath);
-      } else {
-        relativePath = filePath;
-        absoluteFilePath = join(testDir, CONTENT_DIR, filePath);
-      }
-
-      expect(relativePath).toBe('skills/test-skill.md');
-      expect(absoluteFilePath).toBe(join(testDir, '.ai-content', 'skills', 'test-skill.md'));
-    });
-
-    it('should resolve absolute paths correctly', () => {
-      const CONTENT_DIR = '.ai-content';
-      const contentDir = join(testDir, CONTENT_DIR);
-      const filePath = join(contentDir, 'skills', 'test-skill.md');
-
-      let relativePath: string;
-      let absoluteFilePath: string;
-
-      if (filePath.startsWith(CONTENT_DIR + '/')) {
-        relativePath = filePath.slice(CONTENT_DIR.length + 1);
-        absoluteFilePath = join(testDir, filePath);
-      } else if (filePath.startsWith('/')) {
-        absoluteFilePath = filePath;
-        relativePath = absoluteFilePath.replace(contentDir + '/', '');
-      } else {
-        relativePath = filePath;
-        absoluteFilePath = join(contentDir, filePath);
-      }
-
-      expect(absoluteFilePath).toBe(filePath);
-      expect(relativePath).toBe('skills/test-skill.md');
-    });
-
-    it('should resolve relative paths correctly', () => {
-      const CONTENT_DIR = '.ai-content';
-      const contentDir = join(testDir, CONTENT_DIR);
-      const filePath = 'skills/test-skill.md';
-
-      let relativePath: string;
-      let absoluteFilePath: string;
-
-      if (filePath.startsWith(CONTENT_DIR + '/')) {
-        relativePath = filePath.slice(CONTENT_DIR.length + 1);
-        absoluteFilePath = join(testDir, filePath);
-      } else if (filePath.startsWith('/')) {
-        absoluteFilePath = filePath;
-        relativePath = absoluteFilePath.replace(contentDir + '/', '');
-      } else {
-        relativePath = filePath;
-        absoluteFilePath = join(contentDir, filePath);
-      }
-
-      expect(relativePath).toBe('skills/test-skill.md');
-      expect(absoluteFilePath).toBe(join(contentDir, 'skills', 'test-skill.md'));
-    });
-  });
-
-  describe('content type detection', () => {
-    function detectContentType(relativePath: string): string | null {
-      if (relativePath.startsWith('skills/') || relativePath.startsWith('skills/')) return 'skills';
-      if (relativePath.startsWith('workflows/') || relativePath.startsWith('workflows/')) return 'workflows';
-      if (relativePath.startsWith('rules/') || relativePath.startsWith('rules/')) return 'rules';
-      return null;
-    }
-
+  describe('detectContentType', () => {
     it('should detect skills content type', () => {
       expect(detectContentType('skills/test.md')).toBe('skills');
     });
@@ -139,89 +57,136 @@ describe('Promote', () => {
     });
   });
 
-  describe('promote integration', () => {
-    it('should copy file to SSOT templates directory', async () => {
-      // Create a local skill
-      const skillContent = '# My Skill\nDo the thing.';
+  describe('resolveFilePath', () => {
+    it('should resolve .ai-content/ prefixed paths', () => {
+      const result = resolveFilePath(testDir, '.ai-content/skills/test-skill.md');
+      expect(result.relativePath).toBe('skills/test-skill.md');
+      expect(result.absoluteFilePath).toBe(join(testDir, '.ai-content', 'skills', 'test-skill.md'));
+    });
+
+    it('should resolve absolute paths', () => {
+      const absPath = join(testDir, '.ai-content', 'skills', 'test-skill.md');
+      const result = resolveFilePath(testDir, absPath);
+      expect(result.absoluteFilePath).toBe(absPath);
+      expect(result.relativePath).toBe('skills/test-skill.md');
+    });
+
+    it('should resolve relative paths', () => {
+      const result = resolveFilePath(testDir, 'skills/test-skill.md');
+      expect(result.relativePath).toBe('skills/test-skill.md');
+      expect(result.absoluteFilePath).toBe(join(testDir, '.ai-content', 'skills', 'test-skill.md'));
+    });
+  });
+
+  describe('runPromote', () => {
+    let exitSpy: ReturnType<typeof mockProcessExit>;
+    let consoleSpy: ReturnType<typeof suppressConsole>;
+
+    beforeEach(() => {
+      exitSpy = mockProcessExit();
+      consoleSpy = suppressConsole();
+    });
+
+    afterEach(() => {
+      exitSpy.mockRestore();
+      consoleSpy.mockRestore();
+    });
+
+    async function importRunPromote() {
+      return (await import('../../src/cli/promote.js')).runPromote;
+    }
+
+    it('should promote a skill to SSOT', async () => {
       await writeFile(
         join(testDir, '.ai-content', 'skills', 'my-skill.md'),
-        skillContent,
+        '# My Skill',
       );
 
-      // Simulate promote: read from local, write to SSOT
-      const content = await readFile(
-        join(testDir, '.ai-content', 'skills', 'my-skill.md'),
+      const runPromote = await importRunPromote();
+      await runPromote(testDir, 'skills/my-skill.md');
+
+      expect(exitSpy).not.toHaveBeenCalled();
+      const promoted = await readFile(
+        join(sourceDir, 'templates', 'skills', 'my-skill.md'),
         'utf-8',
       );
-      const targetPath = join(sourceDir, 'templates', 'skills', 'my-skill.md');
-      await writeFile(targetPath, content);
-
-      // Verify
-      const promoted = await readFile(targetPath, 'utf-8');
-      expect(promoted).toBe(skillContent);
+      expect(promoted).toBe('# My Skill');
     });
 
     it('should not overwrite existing SSOT file without force', async () => {
-      // Create existing SSOT file
-      const existingContent = '# Existing Skill';
       await writeFile(
         join(sourceDir, 'templates', 'skills', 'existing.md'),
-        existingContent,
+        '# Old',
       );
-
-      // Create local file with different content
       await writeFile(
         join(testDir, '.ai-content', 'skills', 'existing.md'),
-        '# Updated Skill',
+        '# New',
       );
 
-      // Simulate promote without force: check existence first
-      const { access } = await import('fs/promises');
-      let exists = true;
-      try {
-        await access(join(sourceDir, 'templates', 'skills', 'existing.md'));
-      } catch {
-        exists = false;
-      }
+      const runPromote = await importRunPromote();
+      await runPromote(testDir, 'skills/existing.md');
 
-      expect(exists).toBe(true);
-      // Should NOT overwrite — verify original content preserved
+      // Should NOT overwrite
       const content = await readFile(
         join(sourceDir, 'templates', 'skills', 'existing.md'),
         'utf-8',
       );
-      expect(content).toBe(existingContent);
+      expect(content).toBe('# Old');
     });
 
     it('should overwrite existing SSOT file with force', async () => {
-      // Create existing SSOT file
       await writeFile(
         join(sourceDir, 'templates', 'skills', 'existing.md'),
-        '# Old Content',
-      );
-
-      // Create local file with new content
-      const newContent = '# New Content';
-      await writeFile(
-        join(testDir, '.ai-content', 'skills', 'existing.md'),
-        newContent,
-      );
-
-      // Simulate promote with force: overwrite regardless
-      const localContent = await readFile(
-        join(testDir, '.ai-content', 'skills', 'existing.md'),
-        'utf-8',
+        '# Old',
       );
       await writeFile(
-        join(sourceDir, 'templates', 'skills', 'existing.md'),
-        localContent,
+        join(testDir, '.ai-content', 'skills', 'existing.md'),
+        '# New',
       );
 
-      const result = await readFile(
+      const runPromote = await importRunPromote();
+      await runPromote(testDir, 'skills/existing.md', true);
+
+      const content = await readFile(
         join(sourceDir, 'templates', 'skills', 'existing.md'),
         'utf-8',
       );
-      expect(result).toBe(newContent);
+      expect(content).toBe('# New');
+    });
+
+    it('should exit when file does not exist', async () => {
+      const runPromote = await importRunPromote();
+      await expect(
+        runPromote(testDir, 'skills/nonexistent.md'),
+      ).rejects.toThrow('process.exit');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+
+    it('should exit when content type cannot be determined', async () => {
+      await writeFile(join(testDir, '.ai-content', 'random.md'), '# Random');
+
+      const runPromote = await importRunPromote();
+      await expect(
+        runPromote(testDir, 'random.md'),
+      ).rejects.toThrow('process.exit');
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+
+    it('should exit when no content_source is configured', async () => {
+      await writeFile(
+        join(testDir, 'ai-toolkit.yaml'),
+        'version: "1.0"\neditors:\n  cursor: true\n',
+      );
+      await writeFile(
+        join(testDir, '.ai-content', 'skills', 'test.md'),
+        '# Test',
+      );
+
+      const runPromote = await importRunPromote();
+      await expect(
+        runPromote(testDir, 'skills/test.md'),
+      ).rejects.toThrow('process.exit');
+      expect(exitSpy).toHaveBeenCalledWith(1);
     });
   });
 });

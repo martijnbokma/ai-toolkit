@@ -137,4 +137,22 @@ describe('Gitignore', () => {
     const rulesDirCount = (content.match(/\.test\/rules\//g) || []).length;
     expect(rulesDirCount).toBe(1);
   });
+
+  it('should include workflows directory when different from skills', async () => {
+    const adapterWithWorkflows: EditorAdapter = {
+      name: 'windsurf',
+      fileNaming: 'flat',
+      entryPoint: '.windsurfrules',
+      directories: {
+        rules: '.windsurf/rules',
+        skills: '.windsurf/skills',
+        workflows: '.windsurf/workflows',
+      },
+    };
+
+    await updateGitignore(testDir, [adapterWithWorkflows]);
+
+    const content = await readFile(join(testDir, '.gitignore'), 'utf-8');
+    expect(content).toContain('.windsurf/workflows/');
+  });
 });

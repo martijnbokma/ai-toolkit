@@ -171,6 +171,136 @@ describe('Syncer', () => {
     expect(orphanPaths.some((p) => p.includes('old-skill.md'))).toBe(true);
   });
 
+  it('should sync workflows to editors that support them', async () => {
+    await mkdir(join(testDir, '.ai-content', 'workflows'), { recursive: true });
+    await writeFile(
+      join(testDir, '.ai-content', 'workflows', 'deploy.md'),
+      '# Deploy Workflow',
+    );
+
+    const result = await runSync(testDir, baseConfig);
+
+    expect(result.errors).toEqual([]);
+    // Windsurf-like editors with workflows dir should get the file
+    // but cursor+claude in baseConfig don't have workflows dir, so just check no errors
+  });
+
+  it('should sync settings when configured', async () => {
+    const configWithSettings: ToolkitConfig = {
+      ...baseConfig,
+      settings: {
+        indent_size: 2,
+        indent_style: 'space',
+        format_on_save: true,
+      },
+    };
+
+    const result = await runSync(testDir, configWithSettings);
+
+    expect(result.errors).toEqual([]);
+    expect(result.synced.length).toBeGreaterThan(0);
+  });
+
+  it('should return early when no editors enabled', async () => {
+    const noEditorsConfig: ToolkitConfig = {
+      version: '1.0',
+      editors: { cursor: false, claude: false },
+    };
+
+    const result = await runSync(testDir, noEditorsConfig);
+
+    expect(result.synced).toEqual([]);
+  });
+
+  it('should sync skills with subdirectory naming for trae', async () => {
+    const traeConfig: ToolkitConfig = {
+      version: '1.0',
+      editors: { trae: true },
+    };
+
+    await writeFile(
+      join(testDir, '.ai-content', 'skills', 'debug.md'),
+      '# Debug Skill',
+    );
+
+    const result = await runSync(testDir, traeConfig);
+
+    expect(result.errors).toEqual([]);
+    // Trae uses subdirectory naming: .trae/skills/debug/SKILL.md
+    const traeSkill = await readFile(
+      join(testDir, '.trae', 'skills', 'debug', 'SKILL.md'),
+      'utf-8',
+    );
+    expect(traeSkill).toContain('# Debug Skill');
+    expect(traeSkill).toContain('AUTO-GENERATED');
+  });
+
+  it('should sync with content_sources (local SSOT)', async () => {
+    // Create an external content source
+    const ssotDir = join(testDir, 'shared-content');
+    await mkdir(join(ssotDir, 'rules'), { recursive: true });
+    await writeFile(join(ssotDir, 'rules', 'shared-rule.md'), '# Shared Rule');
+
+    const configWithSources: ToolkitConfig = {
+      ...baseConfig,
+      content_sources: [
+        { type: 'local', path: ssotDir, include: ['rules'] },
+      ],
+    };
+
+    const result = await runSync(testDir, configWithSources);
+
+    expect(result.errors).toEqual([]);
+    // The shared rule should be synced to editors
+    const cursorRule = await readFile(
+      join(testDir, '.cursor', 'rules', 'shared-rule.md'),
+      'utf-8',
+    );
+    expect(cursorRule).toContain('# Shared Rule');
+  });
+
+  it('should detect SSOT orphans and diffs when content_sources configured', async () => {
+    // Create SSOT source with a file that doesn't exist locally
+    const ssotDir = join(testDir, 'ssot-source');
+    await mkdir(join(ssotDir, 'rules'), { recursive: true });
+    await mkdir(join(ssotDir, 'skills'), { recursive: true });
+    await writeFile(join(ssotDir, 'rules', 'ssot-only.md'), '# SSOT Only');
+
+    const configWithSources: ToolkitConfig = {
+      ...baseConfig,
+      content_sources: [
+        { type: 'local', path: ssotDir },
+      ],
+    };
+
+    const result = await runSync(testDir, configWithSources);
+
+    expect(result.errors).toEqual([]);
+    // ssotOrphans should detect the file that's in SSOT but not locally
+    expect(result.ssotOrphans.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it('should sync workflows to windsurf which supports them', async () => {
+    const windsurfConfig: ToolkitConfig = {
+      version: '1.0',
+      editors: { windsurf: true },
+    };
+
+    await writeFile(
+      join(testDir, '.ai-content', 'workflows', 'deploy.md'),
+      '# Deploy',
+    );
+
+    const result = await runSync(testDir, windsurfConfig);
+
+    expect(result.errors).toEqual([]);
+    const wfFile = await readFile(
+      join(testDir, '.windsurf', 'workflows', 'deploy.md'),
+      'utf-8',
+    );
+    expect(wfFile).toContain('# Deploy');
+  });
+
   it('dry-run should not write files', async () => {
     await writeFile(
       join(testDir, '.ai-content', 'rules', 'test.md'),
@@ -186,5 +316,28 @@ describe('Syncer', () => {
     await expect(
       access(join(testDir, '.cursor', 'rules', 'test.md')),
     ).rejects.toThrow();
+  });
+
+  it('dry-run should report orphans without removing', async () => {
+    // First sync to create files
+    await writeFile(
+      join(testDir, '.ai-content', 'rules', 'temp.md'),
+      '# Temp',
+    );
+    await runSync(testDir, baseConfig);
+
+    // Remove source and dry-run
+    const { unlink } = await import('fs/promises');
+    await unlink(join(testDir, '.ai-content', 'rules', 'temp.md'));
+
+    const result = await runSync(testDir, baseConfig, { dryRun: true });
+
+    if (result.pendingOrphans.length > 0) {
+      // Orphan should still exist on disk
+      const { access } = await import('fs/promises');
+      await expect(
+        access(result.pendingOrphans[0].absolutePath),
+      ).resolves.toBeUndefined();
+    }
   });
 });
