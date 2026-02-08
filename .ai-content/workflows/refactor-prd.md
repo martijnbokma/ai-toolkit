@@ -4,7 +4,22 @@
 
 Guide an AI assistant in creating a detailed Refactoring Product Requirements Document (R-PRD) in Markdown format. This document focuses on improving code quality, maintainability, and scalability without changing functional behavior.
 
-## Process
+## Modes
+
+### Fast-Track Mode (used by `start-refactor` workflow)
+
+When called from the `start-refactor` workflow, the candidates list already provides scores, issues, and architectural violations. In this mode:
+
+- **Skip clarifying questions** — use the context from `docs/REFACTOR_CANDIDATES.md` and the source files directly.
+- **Skip separate task generation pause** — tasks are generated in the same pass as the PRD.
+- **Output is embedded** in the combined `docs/refactor-[filename].md` document (not a separate file).
+- **Use recommended defaults** for all decisions based on project conventions and best practices.
+
+### Standard Mode (standalone use)
+
+When called directly by the user (not via `start-refactor`), follow the full interactive process below.
+
+## Process (Standard Mode)
 
 1. **Read Project Context First:** **MANDATORY** — Read the project's architecture documentation, conventions, and SSOT before starting. This ensures alignment with the existing codebase structure.
 2. **Receive Refactoring Request:** The user identifies a module, component, or pattern that needs cleanup or restructuring.

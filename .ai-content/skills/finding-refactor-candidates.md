@@ -5,6 +5,7 @@ Analyze the project and identify files or patterns that are candidates for refac
 ## When
 
 Use this skill when:
+
 - The user asks to find "technical debt" or "refactor candidates".
 - A new feature is planned and we want to clean up surrounding code first.
 - You see patterns that deviate from project standards (e.g., large files or duplication).
@@ -70,19 +71,20 @@ After running the analysis, create the candidates list:
 
 ## Priority Matrix
 
-| # | File | Lines | Tech Debt | Impact | Risk | Complexity | Score | Priority | Status |
-|---|------|-------|-----------|--------|------|------------|-------|----------|--------|
-| 1 | path/to/file.tsx | 500 | 5 | 4 | 3 | 4 | 16 | CRITICAL | ⬜ |
+| #   | File             | Lines | Tech Debt | Impact | Risk | Complexity | Score | Priority | Status |
+| --- | ---------------- | ----- | --------- | ------ | ---- | ---------- | ----- | -------- | ------ |
+| 1   | path/to/file.tsx | 500   | 5         | 4      | 3    | 4          | 16    | CRITICAL | ⬜     |
 
 ## Architectural Violations
 
-| File | Issue | Severity |
-|------|-------|----------|
-| path/to/file.tsx | Data access mixed with UI logic | HIGH |
+| File             | Issue                           | Severity |
+| ---------------- | ------------------------------- | -------- |
+| path/to/file.tsx | Data access mixed with UI logic | HIGH     |
 
 ## Missing Test Coverage
 
 ### Modules Without Tests
+
 - moduleName (location)
 
 ## Statistics
@@ -101,6 +103,7 @@ After running the analysis, create the candidates list:
 ## What to Deliver
 
 The candidates list must include:
+
 - **Priority Matrix**: Table with scores for Debt, Impact, Risk, and Complexity.
 - **Top 5 Phase 1**: The most critical candidates for immediate action.
 - **Architectural Violations**: List of files violating separation of concerns or SSOT.
@@ -109,29 +112,43 @@ The candidates list must include:
 
 ## Next Steps (Per-File Refactor Pipeline)
 
-After generating the candidates list, process **each file individually** through the following pipeline. This keeps refactors focused, prevents the AI from handling too many files at once, and makes progress trackable per file.
+**IMPORTANT:** Do NOT start refactoring in this chat session. Each refactor must happen in a **separate, fresh chat** using the `start-refactor` workflow. This keeps context clean and prevents the AI from handling too many files at once.
 
-### Pipeline per file
+### After presenting the candidates list
 
-Process files in order of priority score (highest first). Complete the full pipeline for one file before starting the next.
+1. Save the candidates list to `docs/REFACTOR_CANDIDATES.md`.
+2. Generate **copy-paste prompts** for each candidate, ordered by priority score (highest first).
+3. Present them to the user so they can start a new chat per file.
 
-1. **Generate Refactoring PRD**: Use the `refactor-prd` workflow for this specific file.
-   - Input: the file path, its scores, and any architectural violations from the candidates list.
-   - Output: `docs/prd-refactor-[filename].md`
-2. **Generate Task List**: Use the `generate-tasks` workflow with the PRD from step 1 as input.
-   - Output: `docs/tasks-refactor-[filename].md`
-3. **Execute Tasks**: Work through the generated task list, checking off sub-tasks as they are completed.
-4. **Update Status**: Mark the file as completed (✅) in the Priority Matrix.
+### Output format for prompts
+
+After the candidates list, output the following section:
+
+```markdown
+## Ready-to-use prompts
+
+Copy-paste one of these into a **new chat** to start that refactor:
+
+### 1. `[filename]` (Score: [score] | Priority: [priority])
+
+> Refactor `[full/path/to/file]` using the start-refactor workflow.
+> Score: [score] | Issues: [brief summary of issues from the matrix].
+
+### 2. `[filename]` (Score: [score] | Priority: [priority])
+
+> Refactor `[full/path/to/file]` using the start-refactor workflow.
+> Score: [score] | Issues: [brief summary of issues from the matrix].
+
+(etc.)
+```
 
 ### Interaction Flow
 
-After presenting the candidates list, ask the user:
+After presenting the candidates list and prompts, say:
 
-> "I have identified [N] refactor candidates. Shall I start with the first file (`[filename]`)? I will generate a Refactoring PRD and task list for it."
+> "I have identified [N] refactor candidates. The list is saved in `docs/REFACTOR_CANDIDATES.md`. To start refactoring, copy one of the prompts above into a **new chat**. Work through them in order of priority — one file per chat."
 
-Wait for confirmation before proceeding. After completing a file, ask before moving to the next:
-
-> "Refactor for `[filename]` is complete. Shall I continue with the next file (`[next-filename]`)?"
+**Do NOT offer to start refactoring in this chat. Do NOT ask "Shall I start with the first file?".**
 
 ## Managing Progress
 
@@ -142,6 +159,7 @@ Update the Status column in the Priority Matrix as refactors progress:
 - **✅** = Refactor completed and verified
 
 ## Key Rules
+
 - **One file at a time**: Never refactor multiple files simultaneously. Complete the full pipeline for one file before moving to the next.
 - **Isolated changes**: Each refactor should be self-contained and not introduce regressions in other files.
 - **Context-aware**: Look beyond just lines; understand the impact on the rest of the system.

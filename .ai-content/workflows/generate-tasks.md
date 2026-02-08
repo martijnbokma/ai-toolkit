@@ -9,7 +9,21 @@ Guide an AI assistant in creating a detailed, step-by-step task list in Markdown
 - **Format:** Markdown (`.md`)
 - **Filename:** `tasks-[feature-name].md`
 
-## Process
+## Modes
+
+### Direct Mode (used by `start-refactor` workflow)
+
+When called from the `start-refactor` workflow, the PRD analysis is already complete and embedded in the same document. In this mode:
+
+- **Skip the "Go" pause** — generate parent tasks AND sub-tasks in one pass.
+- **Output is embedded** in the combined `docs/refactor-[filename].md` document (not a separate file).
+- All other rules (task format, relevant files, notes) still apply.
+
+### Standard Mode (standalone use)
+
+When called directly by the user (not via `start-refactor`), follow the full two-phase process below.
+
+## Process (Standard Mode)
 
 1. **Receive Requirements:** The user provides a feature request, task description, or points to existing documentation (e.g., a PRD).
 2. **Analyze Requirements:** Analyze the functional requirements, user needs, and implementation scope from the provided information.
@@ -42,6 +56,7 @@ The generated task list _must_ follow this structure:
 **IMPORTANT:** As you complete each task, check it off by changing `- [ ]` to `- [x]`. This helps track progress and ensures you don't skip any steps.
 
 Example:
+
 - `- [ ] 1.1 Read file` → `- [x] 1.1 Read file` (after completing)
 
 Update the file after completing each sub-task, not just after completing an entire parent task.
