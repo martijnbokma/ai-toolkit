@@ -70,13 +70,17 @@ function buildCustomAdapter(def: CustomEditorConfig): EditorAdapter {
       workflows: def.workflows_dir,
     },
     generateEntryPointContent(config: ToolkitConfig): string {
-      const lines: string[] = [AUTO_GENERATED_MARKER, ''];
-      const name = config.metadata?.name || 'Project';
-      lines.push(`# ${name} — ${def.name} Rules`, '');
-      if (config.metadata?.description) lines.push(config.metadata.description, '');
-      return lines.join('\n');
+      return generateCustomEntryPointContent(config, def.name);
     },
   };
+}
+
+function generateCustomEntryPointContent(config: ToolkitConfig, editorName: string): string {
+  const lines: string[] = [AUTO_GENERATED_MARKER, ''];
+  const name = config.metadata?.name || 'Project';
+  lines.push(`# ${name} — ${editorName} Rules`, '');
+  if (config.metadata?.description) lines.push(config.metadata.description, '');
+  return lines.join('\n');
 }
 
 export function getEnabledAdapters(config: ToolkitConfig): EditorAdapter[] {

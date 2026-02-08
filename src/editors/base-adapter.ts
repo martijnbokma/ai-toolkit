@@ -9,6 +9,16 @@ export abstract class BaseEditorAdapter implements EditorAdapter {
   entryPoint?: string;
   mcpConfigPath?: string;
 
+  /** Title suffix appended after project name, e.g. "Cursor Rules" → "# MyApp — Cursor Rules" */
+  protected entryPointTitle?: string;
+  /** Heading for the tech stack section. Defaults to 'Tech Stack'. */
+  protected techStackHeading = 'Tech Stack';
+  /** Closing message shown after tech stack. Set to undefined to omit. */
+  protected closingMessage: string | undefined =
+    '## Rules & Skills\n\nThis project uses ai-toolkit to manage AI editor configurations.\nRules and skills are automatically synced from `.ai-content/`.';
+  /** Whether to include a `---` separator after the title block. Defaults to true. */
+  protected hasSeparator = true;
+
   generateFrontmatter?(skillName: string, description?: string): string;
 
   generateEntryPointContent(config: ToolkitConfig): string {
@@ -17,14 +27,20 @@ export abstract class BaseEditorAdapter implements EditorAdapter {
     const name = config.metadata?.name || 'Project';
     const desc = config.metadata?.description;
 
-    lines.push(`# ${name}`);
+    const title = this.entryPointTitle ? `# ${name} — ${this.entryPointTitle}` : `# ${name}`;
+    lines.push(title);
     if (desc) lines.push('', desc);
-    lines.push('', '---', '');
+
+    if (this.hasSeparator) {
+      lines.push('', '---', '');
+    } else {
+      lines.push('');
+    }
 
     if (config.tech_stack) {
       const stack = Object.entries(config.tech_stack).filter(([, v]) => v);
       if (stack.length > 0) {
-        lines.push('## Tech Stack', '');
+        lines.push(`## ${this.techStackHeading}`, '');
         for (const [key, value] of stack) {
           lines.push(`- **${key}**: ${value}`);
         }
@@ -32,13 +48,9 @@ export abstract class BaseEditorAdapter implements EditorAdapter {
       }
     }
 
-    lines.push(
-      '## Rules & Skills',
-      '',
-      'This project uses ai-toolkit to manage AI editor configurations.',
-      'Rules and skills are automatically synced from `.ai-content/`.',
-      '',
-    );
+    if (this.closingMessage) {
+      lines.push(this.closingMessage, '');
+    }
 
     return lines.join('\n');
   }

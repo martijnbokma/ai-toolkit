@@ -1,5 +1,6 @@
 import { join } from 'path';
 import { fileExists, readTextFile } from './file-ops.js';
+import { readPackageJson, analyzeDependencies } from '../sync/analyzers/package-analyzer.js';
 
 export interface DetectedStack {
   language?: string;
@@ -7,44 +8,6 @@ export interface DetectedStack {
   runtime?: string;
   database?: string;
 }
-
-interface PackageJson {
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-}
-
-const FRAMEWORK_DETECTORS: Array<{ dep: string; name: string }> = [
-  { dep: 'next', name: 'Next.js' },
-  { dep: 'nuxt', name: 'Nuxt' },
-  { dep: 'remix', name: 'Remix' },
-  { dep: '@sveltejs/kit', name: 'SvelteKit' },
-  { dep: 'svelte', name: 'Svelte' },
-  { dep: 'astro', name: 'Astro' },
-  { dep: '@angular/core', name: 'Angular' },
-  { dep: 'vue', name: 'Vue' },
-  { dep: 'react', name: 'React' },
-  { dep: 'express', name: 'Express' },
-  { dep: 'fastify', name: 'Fastify' },
-  { dep: 'hono', name: 'Hono' },
-  { dep: '@nestjs/core', name: 'NestJS' },
-];
-
-const DATABASE_DETECTORS: Array<{ dep: string; name: string }> = [
-  { dep: '@supabase/supabase-js', name: 'Supabase' },
-  { dep: 'prisma', name: 'Prisma' },
-  { dep: '@prisma/client', name: 'Prisma' },
-  { dep: 'drizzle-orm', name: 'Drizzle' },
-  { dep: 'mongoose', name: 'MongoDB' },
-  { dep: 'mongodb', name: 'MongoDB' },
-  { dep: 'pg', name: 'PostgreSQL' },
-  { dep: 'mysql2', name: 'MySQL' },
-  { dep: 'better-sqlite3', name: 'SQLite' },
-  { dep: 'redis', name: 'Redis' },
-  { dep: 'ioredis', name: 'Redis' },
-  { dep: '@planetscale/database', name: 'PlanetScale' },
-  { dep: 'firebase', name: 'Firestore' },
-  { dep: 'firebase-admin', name: 'Firestore' },
-];
 
 /**
  * Auto-detect tech stack by scanning project files.
@@ -56,32 +19,24 @@ export async function detectStack(projectRoot: string): Promise<DetectedStack> {
   // Detect language
   detected.language = await detectLanguage(projectRoot);
 
-  // Detect runtime
+  // Detect runtime (file-based: lockfiles)
   detected.runtime = await detectRuntime(projectRoot);
 
   // Parse package.json for framework + database detection
   const pkg = await readPackageJson(projectRoot);
   if (pkg) {
-    const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+    const deps = analyzeDependencies(pkg);
 
-    // Detect framework
-    for (const { dep, name } of FRAMEWORK_DETECTORS) {
-      if (allDeps[dep]) {
-        detected.framework = name;
-        break;
-      }
-    }
+    if (deps.framework) detected.framework = deps.framework;
+    if (deps.database.length > 0) detected.database = deps.database[0];
 
-    // Detect database
-    for (const { dep, name } of DATABASE_DETECTORS) {
-      if (allDeps[dep]) {
-        detected.database = name;
-        break;
-      }
+    // Fall back to packageManager-based runtime if file-based didn't detect
+    if (!detected.runtime && deps.runtime) {
+      detected.runtime = deps.runtime;
     }
   }
 
-  // Python framework detection
+  // Python framework detection (overrides package.json-based detection)
   if (detected.language === 'Python') {
     const pyFramework = await detectPythonFramework(projectRoot);
     if (pyFramework) detected.framework = pyFramework;
@@ -179,14 +134,3 @@ async function detectPythonFramework(projectRoot: string): Promise<string | unde
   return undefined;
 }
 
-async function readPackageJson(projectRoot: string): Promise<PackageJson | null> {
-  const pkgPath = join(projectRoot, 'package.json');
-  if (!(await fileExists(pkgPath))) return null;
-
-  try {
-    const content = await readTextFile(pkgPath);
-    return JSON.parse(content) as PackageJson;
-  } catch {
-    return null;
-  }
-}

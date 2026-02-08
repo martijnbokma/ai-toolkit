@@ -7,7 +7,7 @@ import { mockProcessExit, suppressConsole } from './helpers.js';
 // Mock @clack/prompts to simulate user input
 vi.mock('@clack/prompts', () => {
   let callIndex = 0;
-  const responses: any[] = [];
+  const responses: (string | boolean | string[])[] = [];
 
   return {
     intro: vi.fn(),
@@ -32,7 +32,7 @@ vi.mock('@clack/prompts', () => {
       return responses[callIndex++] ?? ['cursor'];
     }),
     // Helper to set responses for a test
-    __setResponses: (r: any[]) => {
+    __setResponses: (r: (string | boolean | string[])[]) => {
       callIndex = 0;
       responses.length = 0;
       responses.push(...r);

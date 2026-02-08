@@ -50,6 +50,7 @@ const FRAMEWORK_MAP: Record<string, string> = {
   'express': 'Express',
   'fastify': 'Fastify',
   'hono': 'Hono',
+  '@nestjs/core': 'NestJS',
   'gatsby': 'Gatsby',
 };
 
