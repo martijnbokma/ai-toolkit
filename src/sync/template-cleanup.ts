@@ -9,8 +9,13 @@ const TEMPLATE_CATEGORIES = [SKILLS_DIR, WORKFLOWS_DIR];
  * Removes files from .ai-content/ that were originally copied from templates
  * but no longer exist in the templates directory.
  *
- * Only removes files whose relative path falls within a known template subdirectory
- * (e.g. skills/specialists/) to avoid deleting user-created content.
+ * A file is only removed if ALL of these conditions are met:
+ * 1. It is in a template-managed subdirectory (e.g. skills/specialists/)
+ * 2. The template file no longer exists
+ * 3. The local content is identical to a known template (i.e. unmodified)
+ *
+ * User-created or user-modified files are never removed, even if they
+ * live in a template-managed subdirectory.
  */
 export async function cleanupRemovedTemplates(
   contentDir: string,
@@ -27,6 +32,9 @@ export async function cleanupRemovedTemplates(
     // Get all template files (relative paths like "specialists/backend-developer.md")
     const templateFiles = await findMarkdownFiles(templateCategoryDir, templateCategoryDir);
     const templatePaths = new Set(templateFiles.map((f) => f.relativePath));
+
+    // Build a set of known template contents for identity comparison
+    const templateContents = new Set(templateFiles.map((f) => f.content));
 
     // Get all subdirectories that exist in templates (e.g. "specialists")
     const templateSubdirs = new Set<string>();
@@ -53,18 +61,27 @@ export async function cleanupRemovedTemplates(
         continue;
       }
 
-      if (!templatePaths.has(cf.relativePath)) {
-        // This file was in a template-managed path but no longer exists in templates
-        if (dryRun) {
-          log.dryRun('would remove template-orphan', `${category}/${cf.relativePath}`);
-        } else {
-          const success = await removeFile(cf.absolutePath);
-          if (success) {
-            log.removed(`${category}/${cf.relativePath} (removed from templates)`);
-          }
-        }
-        removed.push(cf.absolutePath);
+      if (templatePaths.has(cf.relativePath)) {
+        // Template still exists for this path — skip
+        continue;
       }
+
+      // Template no longer exists for this path.
+      // Only remove if the local content is an unmodified template copy.
+      if (!templateContents.has(cf.content)) {
+        // Content was modified by the user or is user-created — keep it
+        continue;
+      }
+
+      if (dryRun) {
+        log.dryRun('would remove template-orphan', `${category}/${cf.relativePath}`);
+      } else {
+        const success = await removeFile(cf.absolutePath);
+        if (success) {
+          log.removed(`${category}/${cf.relativePath} (removed from templates)`);
+        }
+      }
+      removed.push(cf.absolutePath);
     }
   }
 

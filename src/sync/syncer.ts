@@ -182,15 +182,15 @@ async function mergeAndSyncContent(
 ): Promise<void> {
   const localDir = join(contentDir, dir);
   const localFiles = await findMarkdownFiles(localDir, localDir);
-  const localNames = new Set(localFiles.map((f) => f.name));
+  const localPaths = new Set(localFiles.map((f) => f.relativePath));
   const merged = [
-    ...externalFiles.filter((f) => !localNames.has(f.name)),
+    ...externalFiles.filter((f) => !localPaths.has(f.relativePath)),
     ...localFiles,
   ];
 
   if (merged.length === 0) return;
 
-  const externalCount = externalFiles.filter((f) => !localNames.has(f.name)).length;
+  const externalCount = externalFiles.filter((f) => !localPaths.has(f.relativePath)).length;
   log.info(`Found ${merged.length} ${type}${externalCount > 0 ? ` (${externalCount} external)` : ''}`);
 
   for (const file of merged) {
@@ -235,18 +235,20 @@ async function syncContentToEditors(
       ].join('\n');
 
       // Determine target path based on file naming convention
+      // Preserve subdirectory structure (e.g. specialists/backend-developer.md)
       let targetPath: string;
       if (adapter.fileNaming === 'subdirectory') {
         targetPath = join(projectRoot, targetDir, file.name, 'SKILL.md');
       } else {
-        targetPath = join(projectRoot, targetDir, `${file.name}.md`);
+        targetPath = join(projectRoot, targetDir, file.relativePath);
+        await ensureDir(join(projectRoot, targetDir, file.relativePath, '..'));
       }
 
       if (dryRun) {
-        log.dryRun('would write', join(targetDir, `${file.name}.md`));
+        log.dryRun('would write', join(targetDir, file.relativePath));
       } else {
         await writeTextFile(targetPath, wrappedContent);
-        log.synced(sourcePath, join(targetDir, `${file.name}.md`));
+        log.synced(sourcePath, join(targetDir, file.relativePath));
       }
       result.synced.push(targetPath);
     } catch (error) {

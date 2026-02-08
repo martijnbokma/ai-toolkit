@@ -19,8 +19,9 @@ describe('cleanupRemovedTemplates', () => {
     await rm(testDir, { recursive: true, force: true });
   });
 
-  it('should remove content files that no longer exist in templates', async () => {
-    // Setup: templates has only backend-developer, but content has both
+  it('should remove content files that no longer exist in templates (unmodified copies)', async () => {
+    // Setup: templates has only backend-developer, but content has both.
+    // removed-skill.md has content identical to an existing template (unmodified copy).
     const templateSkillsDir = join(templatesDir, 'skills', 'specialists');
     const contentSkillsDir = join(contentDir, 'skills', 'specialists');
     await mkdir(templateSkillsDir, { recursive: true });
@@ -28,7 +29,8 @@ describe('cleanupRemovedTemplates', () => {
 
     await writeFile(join(templateSkillsDir, 'backend-developer.md'), '# Backend');
     await writeFile(join(contentSkillsDir, 'backend-developer.md'), '# Backend');
-    await writeFile(join(contentSkillsDir, 'removed-skill.md'), '# Removed');
+    // Content matches a known template — simulates an unmodified copy
+    await writeFile(join(contentSkillsDir, 'removed-skill.md'), '# Backend');
 
     const removed = await cleanupRemovedTemplates(contentDir, false, templatesDir);
 
@@ -40,6 +42,27 @@ describe('cleanupRemovedTemplates', () => {
 
     // Verify backend-developer.md still exists
     await expect(access(join(contentSkillsDir, 'backend-developer.md'))).resolves.toBeUndefined();
+  });
+
+  it('should NOT remove user-modified files even if template was deleted', async () => {
+    // Setup: templates has only backend-developer, content has a file
+    // whose template was removed but content was modified by the user.
+    const templateSkillsDir = join(templatesDir, 'skills', 'specialists');
+    const contentSkillsDir = join(contentDir, 'skills', 'specialists');
+    await mkdir(templateSkillsDir, { recursive: true });
+    await mkdir(contentSkillsDir, { recursive: true });
+
+    await writeFile(join(templateSkillsDir, 'backend-developer.md'), '# Backend');
+    await writeFile(join(contentSkillsDir, 'backend-developer.md'), '# Backend');
+    // Content does NOT match any template — user modified it
+    await writeFile(join(contentSkillsDir, 'removed-skill.md'), '# My Custom Content');
+
+    const removed = await cleanupRemovedTemplates(contentDir, false, templatesDir);
+
+    expect(removed).toEqual([]);
+
+    // Verify the user-modified file still exists
+    await expect(access(join(contentSkillsDir, 'removed-skill.md'))).resolves.toBeUndefined();
   });
 
   it('should NOT remove user-created files in non-template subdirectories', async () => {
@@ -71,7 +94,8 @@ describe('cleanupRemovedTemplates', () => {
 
     await writeFile(join(templateSkillsDir, 'backend-developer.md'), '# Backend');
     await writeFile(join(contentSkillsDir, 'backend-developer.md'), '# Backend');
-    await writeFile(join(contentSkillsDir, 'removed-skill.md'), '# Removed');
+    // Content matches a known template — unmodified copy
+    await writeFile(join(contentSkillsDir, 'removed-skill.md'), '# Backend');
 
     const removed = await cleanupRemovedTemplates(contentDir, true, templatesDir);
 
@@ -90,7 +114,8 @@ describe('cleanupRemovedTemplates', () => {
 
     await writeFile(join(templateSkillsDir, 'code-review.md'), '# Code Review');
     await writeFile(join(contentSkillsDir, 'code-review.md'), '# Code Review');
-    await writeFile(join(contentSkillsDir, 'removed-top-level.md'), '# Removed');
+    // Content matches a known template — unmodified copy
+    await writeFile(join(contentSkillsDir, 'removed-top-level.md'), '# Code Review');
 
     const removed = await cleanupRemovedTemplates(contentDir, false, templatesDir);
 
@@ -117,7 +142,8 @@ describe('cleanupRemovedTemplates', () => {
 
     await writeFile(join(templateWorkflowsDir, 'deploy.md'), '# Deploy');
     await writeFile(join(contentWorkflowsDir, 'deploy.md'), '# Deploy');
-    await writeFile(join(contentWorkflowsDir, 'removed-workflow.md'), '# Removed');
+    // Content matches a known template — unmodified copy
+    await writeFile(join(contentWorkflowsDir, 'removed-workflow.md'), '# Deploy');
 
     const removed = await cleanupRemovedTemplates(contentDir, false, templatesDir);
 

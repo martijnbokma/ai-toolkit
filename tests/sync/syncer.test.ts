@@ -120,6 +120,57 @@ describe('Syncer', () => {
     expect(gitignore).toContain('CLAUDE.md');
   });
 
+  it('should preserve subdirectory structure for skills (e.g. specialists/)', async () => {
+    // Create a skill in a subdirectory
+    await mkdir(join(testDir, '.ai-content', 'skills', 'specialists'), { recursive: true });
+    await writeFile(
+      join(testDir, '.ai-content', 'skills', 'specialists', 'backend-developer.md'),
+      '# Backend Developer\nSpecialist skill.',
+    );
+
+    const result = await runSync(testDir, baseConfig);
+
+    expect(result.errors).toEqual([]);
+
+    // Verify the subdirectory structure is preserved in editor output
+    const cursorSkill = await readFile(
+      join(testDir, '.cursor', 'commands', 'specialists', 'backend-developer.md'),
+      'utf-8',
+    );
+    expect(cursorSkill).toContain('AUTO-GENERATED');
+    expect(cursorSkill).toContain('# Backend Developer');
+    expect(cursorSkill).toContain('Source: .ai-content/skills/specialists/backend-developer.md');
+  });
+
+  it('should detect orphans when a subdirectory skill is deleted', async () => {
+    // Create a user-created specialist skill (not from templates)
+    await mkdir(join(testDir, '.ai-content', 'skills', 'specialists'), { recursive: true });
+    await writeFile(
+      join(testDir, '.ai-content', 'skills', 'specialists', 'old-skill.md'),
+      '# Old Skill\nThis is a user-created specialist.',
+    );
+
+    const result1 = await runSync(testDir, baseConfig);
+    expect(result1.errors).toEqual([]);
+
+    // Verify it was synced to the editor with subdirectory preserved
+    const skillPath = join(testDir, '.cursor', 'commands', 'specialists', 'old-skill.md');
+    const content = await readFile(skillPath, 'utf-8');
+    expect(content).toContain('AUTO-GENERATED');
+    expect(content).toContain('# Old Skill');
+
+    // Now delete the source file and re-sync
+    const { unlink } = await import('fs/promises');
+    await unlink(join(testDir, '.ai-content', 'skills', 'specialists', 'old-skill.md'));
+
+    const result2 = await runSync(testDir, baseConfig);
+
+    // The orphaned file in the editor directory should be detected
+    expect(result2.pendingOrphans.length).toBeGreaterThan(0);
+    const orphanPaths = result2.pendingOrphans.map((o) => o.relativePath);
+    expect(orphanPaths.some((p) => p.includes('old-skill.md'))).toBe(true);
+  });
+
   it('dry-run should not write files', async () => {
     await writeFile(
       join(testDir, '.ai-content', 'rules', 'test.md'),

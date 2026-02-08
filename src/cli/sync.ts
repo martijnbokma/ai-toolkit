@@ -62,6 +62,8 @@ export async function runSyncCommand(
       process.exit(1);
     }
 
+    let needsResync = false;
+
     if (result.ssotDiffs.length > 0) {
       console.log('');
       log.warn(`Found ${result.ssotDiffs.length} file(s) out of sync with SSOT:`);
@@ -84,6 +86,7 @@ export async function runSyncCommand(
             try {
               await copyFile(diff.ssotPath, diff.localPath);
               log.success(`  Updated ${diff.category}/${diff.name}.md locally`);
+              needsResync = true;
             } catch (err) {
               log.error(`  Failed to update: ${err instanceof Error ? err.message : err}`);
             }
@@ -103,12 +106,23 @@ export async function runSyncCommand(
           try {
             await unlink(orphan.absolutePath);
             log.success(`  Removed ${orphan.category}/${orphan.name}.md from SSOT`);
+            needsResync = true;
           } catch (err) {
             log.error(`  Failed to remove: ${err instanceof Error ? err.message : err}`);
           }
         } else {
           log.dim(`  Skipped ${orphan.category}/${orphan.name}.md`);
         }
+      }
+    }
+
+    if (needsResync && !options.dryRun) {
+      console.log('');
+      log.info('Re-syncing to reflect changes...');
+      const resyncResult = await runSync(projectRoot, config, options);
+      log.success(`Re-synced: ${resyncResult.synced.length} file(s)`);
+      if (resyncResult.removed.length > 0) {
+        log.warn(`Removed: ${resyncResult.removed.length} orphaned file(s)`);
       }
     }
 
