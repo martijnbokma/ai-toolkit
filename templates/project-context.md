@@ -32,5 +32,14 @@ src/
 - **Build**: 
 - **Test**: 
 
+## PR & Commit Conventions
+<!-- Describe commit message format, branch naming, and PR guidelines -->
+- **Commit format**: 
+- **Branch naming**: 
+- **Pre-commit checks**: 
+
+## Security
+<!-- Security considerations agents should be aware of, e.g. auth patterns, API keys, sensitive paths -->
+
 ## Notes
 <!-- Any additional context that helps AI editors understand this project -->

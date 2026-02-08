@@ -18,6 +18,8 @@ Ask only the most critical questions needed to write a clear PRD. Focus on areas
 * **Problem/Goal:** If unclear — "What problem does this feature solve for the user?"
 * **Core Functionality:** If vague — "What are the key actions a user should be able to perform?"
 * **Scope/Boundaries:** If broad — "Are there any specific things this feature *should not* do?"
+* **Edge Cases:** If complex — "What should happen when things go wrong? (e.g., invalid input, network failure, empty states)"
+* **User Experience:** If user-facing — "How should users interact with this? What makes a good experience here?"
 * **Success Criteria:** If unstated — "How will we know when this feature is successfully implemented?"
 
 **Important:** Only ask questions when the answer isn't reasonably inferable from the initial prompt.
@@ -58,11 +60,14 @@ The generated PRD should include the following sections:
 2. **Goals:** List the specific, measurable objectives for this feature.
 3. **User Stories:** Detail the user narratives describing feature usage and benefits.
 4. **Functional Requirements:** List the specific functionalities the feature must have. Use clear, concise language. Number these requirements.
-5. **Non-Goals (Out of Scope):** Clearly state what this feature will *not* include to manage scope.
-6. **Design Considerations (Optional):** Link to mockups, describe UI/UX requirements, or mention relevant components/styles if applicable.
-7. **Technical Considerations (Optional):** Mention any known technical constraints, dependencies, or suggestions. Reference the project's architecture and conventions where applicable.
-8. **Success Metrics:** How will the success of this feature be measured?
-9. **Open Questions:** List any remaining questions or areas needing further clarification.
+5. **Edge Cases & Error Handling:** Explicitly list edge cases and how the feature should handle them (invalid input, empty states, network failures, concurrent access, permission errors, etc.).
+6. **UX Considerations:** Describe the expected user experience — loading states, feedback messages, accessibility, responsive behavior, and what "feels right" for this feature.
+7. **Non-Goals (Out of Scope):** Clearly state what this feature will *not* include to manage scope.
+8. **Design Considerations (Optional):** Link to mockups, describe UI/UX requirements, or mention relevant components/styles if applicable.
+9. **Technical Considerations:** Mention any known technical constraints, dependencies, or suggestions. Reference the project's architecture and conventions where applicable. If new libraries or frameworks are needed, list candidates with pros/cons.
+10. **Implementation Strategy:** Suggest how to break this feature into small, incrementally testable steps. Each step should leave the app in a working state.
+11. **Success Metrics:** How will the success of this feature be measured?
+12. **Open Questions:** List any remaining questions or areas needing further clarification.
 
 ## Target Audience
 
