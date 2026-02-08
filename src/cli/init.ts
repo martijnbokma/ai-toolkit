@@ -1,4 +1,5 @@
-import { join, resolve, dirname } from "path";
+import { join, resolve, dirname, relative } from "path";
+import { createRequire } from "module";
 import { readdir } from "fs/promises";
 import yaml from "js-yaml";
 import * as p from "@clack/prompts";
@@ -174,6 +175,11 @@ function formatDetected(detected: DetectedStack): string {
  * Returns a relative path if found, or null if nothing detected.
  */
 async function detectNearbySsot(projectRoot: string): Promise<string | null> {
+  // 1. Try to resolve ai-toolkit as a linked/installed package
+  const linkedPath = await detectLinkedPackage(projectRoot);
+  if (linkedPath) return linkedPath;
+
+  // 2. Fall back to scanning common relative paths
   const candidates = [
     "../ai-toolkit",
     "../shared-ai-rules",
@@ -207,6 +213,39 @@ async function detectNearbySsot(projectRoot: string): Promise<string | null> {
   return null;
 }
 
+/**
+ * Detect ai-toolkit as a linked or installed package (e.g. via bun link / npm link).
+ * Returns a relative path to the package root if found, or null.
+ */
+async function detectLinkedPackage(projectRoot: string): Promise<string | null> {
+  try {
+    const require = createRequire(join(projectRoot, "package.json"));
+    const packageJsonPath = require.resolve("ai-toolkit/package.json");
+    const packageRoot = resolve(packageJsonPath, "..");
+
+    // Don't match the project itself
+    if (packageRoot === projectRoot) return null;
+
+    // Verify it has content (rules/skills in .ai-content/ or templates/)
+    const contentDir = join(packageRoot, ".ai-content");
+    const templatesDir = join(packageRoot, "templates");
+
+    const hasContent =
+      (await fileExists(join(contentDir, "rules"))) ||
+      (await fileExists(join(contentDir, "skills"))) ||
+      (await fileExists(join(templatesDir, "rules"))) ||
+      (await fileExists(join(templatesDir, "skills")));
+
+    if (!hasContent) return null;
+
+    // Return as relative path for consistency with other SSOT paths
+    return relative(projectRoot, packageRoot) || null;
+  } catch {
+    // Package not installed/linked — that's fine
+    return null;
+  }
+}
+
 async function runQuickSetup(
   projectRoot: string,
   existing?: ExistingConfig,
@@ -216,10 +255,11 @@ async function runQuickSetup(
   const dirName = projectRoot.split("/").pop();
 
   // --- 1. Project name (auto-filled from directory) ---
+  const projectName = prev.metadata?.name || dirName || "my-project";
   const name = await p.text({
     message: "Project name",
-    placeholder: "my-project",
-    defaultValue: prev.metadata?.name || dirName || undefined,
+    placeholder: projectName,
+    defaultValue: projectName,
   });
   if (isCancelled(name)) return null;
 
@@ -395,10 +435,11 @@ async function runAdvancedSetup(
   const dirName = projectRoot.split("/").pop();
 
   // --- 1. Project metadata ---
+  const projectName = prev.metadata?.name || dirName || "my-project";
   const name = await p.text({
     message: "Project name",
-    placeholder: "my-project",
-    defaultValue: prev.metadata?.name || dirName || undefined,
+    placeholder: projectName,
+    defaultValue: projectName,
   });
   if (isCancelled(name)) return null;
 
@@ -463,13 +504,18 @@ async function runAdvancedSetup(
   if (isCancelled(wantSsot)) return null;
 
   if (wantSsot) {
+    // Auto-detect linked ai-toolkit package
+    const linkedPath = await detectLinkedPackage(projectRoot);
+
     const sourceType = await p.select({
       message: "Where are the shared rules/skills stored?",
       options: [
         {
           value: "local",
           label: "Local folder",
-          hint: "a folder on your machine, e.g. ../shared-rules",
+          hint: linkedPath
+            ? `detected linked package at ${linkedPath}`
+            : "a folder on your machine, e.g. ../shared-rules",
         },
         {
           value: "package",
@@ -477,7 +523,7 @@ async function runAdvancedSetup(
           hint: "an installed package, e.g. @company/ai-rules",
         },
       ],
-      initialValue: prevSource?.type || undefined,
+      initialValue: prevSource?.type || (linkedPath ? "local" : undefined),
     });
     if (isCancelled(sourceType)) return null;
 
@@ -495,26 +541,40 @@ async function runAdvancedSetup(
     } else {
       const prevPath =
         prevSource?.type === "local" ? prevSource.path : undefined;
-      const pathOptions = [
-        { value: "../ai-toolkit", label: "../ai-toolkit", hint: "default" },
-        {
-          value: "__custom__",
-          label:
-            prevPath && prevPath !== "../ai-toolkit"
-              ? `Custom path... (current: ${prevPath})`
-              : "Custom path...",
-        },
-      ];
+
+      // Build path options, avoiding duplicates
+      const knownPaths = new Set<string>();
+      const pathOptions: { value: string; label: string; hint?: string }[] = [];
+
+      const addOption = (path: string, hint: string) => {
+        if (knownPaths.has(path)) return;
+        knownPaths.add(path);
+        pathOptions.push({ value: path, label: path, hint });
+      };
+
+      // 1. Linked package (highest priority)
+      if (linkedPath) {
+        addOption(linkedPath, "detected via bun/npm link");
+      }
+
+      // 2. Previously configured path
+      if (prevPath) {
+        addOption(prevPath, "current");
+      }
+
+      // 3. Default fallback
+      addOption("../ai-toolkit", "default");
+
+      // 4. Custom option
+      pathOptions.push({ value: "__custom__", label: "Custom path..." });
+
+      // Pre-select: linked > previous > first option
+      const initialValue = linkedPath || prevPath || pathOptions[0]?.value;
 
       const localPath = await p.select({
         message: "Path to the shared folder",
         options: pathOptions,
-        initialValue:
-          prevPath === "../ai-toolkit"
-            ? "../ai-toolkit"
-            : prevPath
-              ? "__custom__"
-              : undefined,
+        initialValue,
       });
       if (isCancelled(localPath)) return null;
 
@@ -523,8 +583,7 @@ async function runAdvancedSetup(
         const custom = await p.text({
           message: "Custom path (relative to this project)",
           placeholder: "../my-shared-rules",
-          defaultValue:
-            prevPath && prevPath !== "../ai-toolkit" ? prevPath : undefined,
+          defaultValue: prevPath || undefined,
         });
         if (isCancelled(custom)) return null;
         finalPath = custom as string;

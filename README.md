@@ -319,6 +319,10 @@ bun run build        # Build for npm publish
 
 See [docs/GUIDE.md](docs/GUIDE.md) for the full guide covering all features in detail.
 
+## Contributing
+
+Want to help improve ai-toolkit? See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, project structure, and how to submit changes.
+
 ## License
 
 MIT
