@@ -12,6 +12,7 @@ dist/
 .cursor/rules/
 .cursorrules
 .windsurf/rules/
+.windsurf/skills/
 .windsurf/workflows/
 .windsurfrules
 CLAUDE.md
