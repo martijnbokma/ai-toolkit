@@ -18,6 +18,7 @@ Every AI code editor uses its own config format and directory structure. Keeping
 - **MCP Server Config** — Distributes MCP settings to supported editors
 - **Content Sources** — Share rules across projects via local paths or npm packages
 - **SSOT Sync** — Auto-promote, diff detection, and orphan cleanup
+- **Auto-Detect Tech Stack** — Automatically detects language, framework, runtime, and database
 - **Template Inheritance** — 8 built-in stack templates (Next.js, React, Vue, Svelte, Python, Django, Rails, Go)
 - **Built-in Templates** — 7+ skill templates, 14 specialist skills, 4 workflow templates
 - **Custom Editors** — Plugin system for unsupported editors
@@ -33,30 +34,37 @@ Every AI code editor uses its own config format and directory structure. Keeping
 ## Installation
 
 ```bash
-# As devDependency (recommended)
-bun add -d ai-toolkit
+# Quickest way — no install needed
+bunx ai-toolkit init
 
-# Or with npm/pnpm
+# Or with npx
+npx ai-toolkit init
+
+# Or install as devDependency first
+bun add -d ai-toolkit
 npm install -D ai-toolkit
 pnpm add -D ai-toolkit
-
-# Or run directly
-bunx ai-toolkit init
 ```
 
 ## Quick Start
 
 ```bash
-# 1. Initialize
-bun ai-toolkit init
+# 1. Initialize (auto-detects tech stack, asks for editors)
+bunx ai-toolkit init
 
-# 2. Configure editors in ai-toolkit.yaml, add content to .ai-content/
+# 2. Add content to .ai-content/ and tweak ai-toolkit.yaml
 
 # 3. Sync to all editors
-bun ai-toolkit sync
+bunx ai-toolkit sync
 ```
 
-That's it. Your AI editors now read the generated files automatically.
+That's it. The wizard auto-detects your tech stack and sets up everything with minimal questions.
+
+For teams with shared rules across projects, use the advanced wizard:
+
+```bash
+bunx ai-toolkit init --advanced
+```
 
 ## Project Structure
 
@@ -248,7 +256,8 @@ Local content always takes priority over shared content. New local files are aut
 
 | Command | Description |
 |---|---|
-| `ai-toolkit init` | Initialize project (config, content dirs, scripts, pre-commit hook) |
+| `ai-toolkit init` | Initialize project (auto-detect tech stack, quick setup) |
+| `ai-toolkit init --advanced` | Full setup wizard with content sources and detailed tech stack |
 | `ai-toolkit init --force` | Reinitialize (overwrites existing config) |
 | `ai-toolkit sync` | Sync content to all enabled editors |
 | `ai-toolkit sync --dry-run` | Preview what would change |

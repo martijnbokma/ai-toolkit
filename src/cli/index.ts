@@ -19,8 +19,9 @@ program
   .command('init')
   .description('Initialize ai-toolkit in the current project')
   .option('-f, --force', 'Overwrite existing configuration', false)
+  .option('-a, --advanced', 'Full setup wizard with content sources and detailed tech stack', false)
   .action(async (options) => {
-    await runInit(process.cwd(), options.force);
+    await runInit(process.cwd(), options.force, options.advanced);
   });
 
 program

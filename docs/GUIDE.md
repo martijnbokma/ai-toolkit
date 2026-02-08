@@ -11,35 +11,38 @@
 7. [Using Templates](#using-templates)
 8. [Built-in Skill & Workflow Templates](#built-in-skill--workflow-templates)
 9. [Custom Editors](#custom-editors)
-10. [Content Sources (shared rules)](#content-sources-shared-rules-across-projects)
-11. [SSOT Synchronization](#ssot-synchronization)
-12. [Promote Command](#promote-command)
-13. [MCP Servers](#mcp-servers)
-14. [Editor Settings](#editor-settings)
-15. [Monorepo Setup](#monorepo-setup)
-16. [CI/CD Integration](#cicd-integration)
-17. [Command Reference](#command-reference)
+10. [Multi-Project Workflow (DRY)](#multi-project-workflow-dry)
+11. [Content Sources (shared rules)](#content-sources-shared-rules-across-projects)
+12. [SSOT Synchronization](#ssot-synchronization)
+13. [Promote Command](#promote-command)
+14. [MCP Servers](#mcp-servers)
+15. [Editor Settings](#editor-settings)
+16. [Monorepo Setup](#monorepo-setup)
+17. [CI/CD Integration](#cicd-integration)
+18. [Command Reference](#command-reference)
 
 ---
 
 ## Installation
 
-### Option 1: As devDependency (recommended)
+### Option 1: Run directly (recommended — no install needed)
 
 ```bash
-# In your project
+bunx ai-toolkit init
+bunx ai-toolkit sync
+
+# Or with npx
+npx ai-toolkit init
+```
+
+### Option 2: As devDependency (for teams)
+
+```bash
 bun add -d ai-toolkit
 
 # Or with npm/pnpm
 npm install -D ai-toolkit
 pnpm add -D ai-toolkit
-```
-
-### Option 2: Run directly (without installation)
-
-```bash
-bunx ai-toolkit init
-bunx ai-toolkit sync
 ```
 
 ### Option 3: Install globally
@@ -72,7 +75,15 @@ Now you can use `bun ai-toolkit init` and `bun ai-toolkit sync` as if it were in
 
 ```bash
 cd /path/to/your/project
-bun ai-toolkit init
+bunx ai-toolkit init
+```
+
+The wizard auto-detects your tech stack (language, framework, runtime, database) and asks you to confirm. You only need to pick your editors — everything else is automatic.
+
+For teams with shared rules across projects, use the advanced wizard:
+
+```bash
+bunx ai-toolkit init --advanced
 ```
 
 This creates:
@@ -122,7 +133,7 @@ tech_stack:
 ### Step 3: Sync to all editors
 
 ```bash
-bun ai-toolkit sync
+bunx ai-toolkit sync
 ```
 
 Output:
@@ -492,6 +503,105 @@ editors:
 
 ---
 
+## Multi-Project Workflow (DRY)
+
+ai-toolkit is designed to keep rules, skills, and workflows in sync across all your projects — write once, use everywhere.
+
+### How it works
+
+```
+~/projects/
+├── ai-toolkit/                  ← Shared SSOT (single source of truth)
+│   └── templates/
+│       ├── rules/               ← Shared rules
+│       ├── skills/              ← Shared skills
+│       └── workflows/           ← Shared workflows
+│
+├── project-1/                   ← content_sources: ../ai-toolkit
+│   ├── ai-toolkit.yaml
+│   └── .ai-content/             ← Local + shared content merged
+│
+├── project-2/                   ← content_sources: ../ai-toolkit
+│   ├── ai-toolkit.yaml
+│   └── .ai-content/             ← Local + shared content merged
+│
+└── project-3/                   ← content_sources: ../ai-toolkit
+    ├── ai-toolkit.yaml
+    └── .ai-content/
+```
+
+### Setup
+
+1. **Create a shared folder** with your team-wide or personal rules:
+
+```bash
+mkdir -p ~/projects/ai-toolkit/templates/{rules,skills,workflows}
+```
+
+2. **Initialize each project** — the wizard auto-detects nearby shared folders:
+
+```bash
+cd ~/projects/project-1
+bunx ai-toolkit init
+# → "Found shared content source at ../ai-toolkit. Link it?" → Yes
+```
+
+Or add it manually to `ai-toolkit.yaml`:
+
+```yaml
+content_sources:
+  - type: local
+    path: ../ai-toolkit
+```
+
+3. **Sync** — shared content is merged with local content:
+
+```bash
+bunx ai-toolkit sync
+```
+
+### Automatic cross-project sync
+
+When you run `watch` mode, ai-toolkit monitors **both** your local `.ai-content/` and the shared SSOT folder:
+
+```bash
+bunx ai-toolkit watch
+# Watching: ai-toolkit.yaml, .ai-content/, ../ai-toolkit (SSOT)
+```
+
+This means:
+- **Change a skill in project-1** → auto-promoted to SSOT → project-2's watcher picks it up → auto-synced
+- **Add a rule to the shared folder** → all projects with `watch` running get it immediately
+- **No manual action needed** — every project stays in sync automatically
+
+### What happens during sync
+
+| Action | Result |
+|---|---|
+| New local file not in SSOT | Auto-promoted to SSOT |
+| SSOT has file not in local | Pulled into local `.ai-content/` |
+| Local file differs from SSOT | Interactive prompt: update SSOT or local? |
+| Local file removed | Prompt: remove from SSOT too? |
+
+### Per-project overrides
+
+Shared content is the baseline. Each project can override or extend it:
+
+```
+project-1/.ai-content/
+├── rules/
+│   └── project-specific-rule.md   ← Only in this project
+├── skills/
+│   └── code-review.md             ← Overrides the shared version
+└── overrides/
+    └── cursor/
+        └── cursor-only.md         ← Only for Cursor in this project
+```
+
+**Local content always wins.** If a file exists both locally and in the SSOT, the local version is used.
+
+---
+
 ## Content Sources (shared rules across projects)
 
 With `content_sources` you can share rules, skills, and workflows across multiple projects. Write them once, use them everywhere.
@@ -562,6 +672,20 @@ content_sources:
 ## SSOT Synchronization
 
 When you use `content_sources`, ai-toolkit keeps your local content and the shared SSOT (Single Source of Truth) automatically in sync.
+
+### Watch mode (automatic cross-project sync)
+
+Run `ai-toolkit watch` in each project. The watcher monitors both your local `.ai-content/` and the shared SSOT folder. When any file changes in the SSOT (e.g. because another project promoted a new skill), the watcher automatically re-syncs.
+
+```bash
+# In project-1 terminal:
+bunx ai-toolkit watch
+
+# In project-2 terminal:
+bunx ai-toolkit watch
+
+# Now: change a skill in project-1 → auto-promoted to SSOT → project-2 picks it up
+```
 
 ### Auto-promote
 
@@ -791,7 +915,8 @@ git add .cursorrules .windsurfrules CLAUDE.md AGENTS.md WARP.md .cursor/ .windsu
 
 | Command | Description |
 |---|---|
-| `ai-toolkit init` | Initialize project (creates config, content dirs, scripts, hook) |
+| `ai-toolkit init` | Initialize project (auto-detect tech stack, quick setup) |
+| `ai-toolkit init --advanced` | Full setup wizard with content sources and detailed tech stack |
 | `ai-toolkit init --force` | Reinitialize (overwrites existing config) |
 | `ai-toolkit sync` | Sync content to all enabled editors |
 | `ai-toolkit sync --dry-run` | Preview what would change |

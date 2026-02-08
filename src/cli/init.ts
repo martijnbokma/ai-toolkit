@@ -1,4 +1,4 @@
-import { join } from 'path';
+import { join, resolve, dirname } from 'path';
 import { readdir } from 'fs/promises';
 import yaml from 'js-yaml';
 import * as p from '@clack/prompts';
@@ -18,6 +18,8 @@ import { runSync } from '../sync/syncer.js';
 import { DEFAULT_CONFIG, generateProjectContext } from '../sync/project-context.js';
 import { installPreCommitHook } from '../utils/git-hooks.js';
 import { addSyncScripts } from '../utils/package-scripts.js';
+import { detectStack } from '../utils/detect-stack.js';
+import type { DetectedStack } from '../utils/detect-stack.js';
 
 const EXAMPLE_RULE = `# Project Conventions
 
@@ -124,14 +126,53 @@ interface ExistingConfig {
   content_sources?: Array<{ type: string; path?: string; name?: string }>;
 }
 
-async function runInteractiveSetup(existing?: ExistingConfig, projectRoot?: string): Promise<Record<string, unknown> | null> {
+function formatDetected(detected: DetectedStack): string {
+  const parts: string[] = [];
+  if (detected.language) parts.push(detected.language);
+  if (detected.framework) parts.push(detected.framework);
+  if (detected.database) parts.push(detected.database);
+  if (detected.runtime) parts.push(`(${detected.runtime})`);
+  return parts.length > 0 ? parts.join(' + ') : 'nothing detected';
+}
+
+/**
+ * Scan for common shared content source folders near the project.
+ * Returns a relative path if found, or null if nothing detected.
+ */
+async function detectNearbySsot(projectRoot: string): Promise<string | null> {
+  const candidates = [
+    '../ai-toolkit',
+    '../shared-ai-rules',
+    '../ai-rules',
+    '../shared-rules',
+  ];
+
+  for (const candidate of candidates) {
+    const resolved = resolve(projectRoot, candidate);
+    // Don't match the project itself
+    if (resolved === projectRoot) continue;
+
+    // Check if the candidate has .ai-content/ or templates/ with rules/skills
+    const contentDir = join(resolved, '.ai-content');
+    const templatesDir = join(resolved, 'templates');
+
+    if (await fileExists(join(contentDir, 'rules')) || await fileExists(join(contentDir, 'skills'))) {
+      return candidate;
+    }
+    if (await fileExists(join(templatesDir, 'rules')) || await fileExists(join(templatesDir, 'skills'))) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+async function runQuickSetup(projectRoot: string, existing?: ExistingConfig): Promise<Record<string, unknown> | null> {
   const config: Record<string, unknown> = { version: '1.0' };
   const prev = existing || {};
+  const dirName = projectRoot.split('/').pop();
 
-  // Use directory name as fallback for project name
-  const dirName = projectRoot ? projectRoot.split('/').pop() : undefined;
-
-  // --- 1. Project metadata ---
+  // --- 1. Project name (auto-filled from directory) ---
   const name = await p.text({
     message: 'Project name',
     placeholder: 'my-project',
@@ -139,46 +180,44 @@ async function runInteractiveSetup(existing?: ExistingConfig, projectRoot?: stri
   });
   if (isCancelled(name)) return null;
 
-  const description = await p.text({
-    message: 'Description (optional)',
-    placeholder: 'A short description of your project',
-    defaultValue: prev.metadata?.description || '',
-  });
-  if (isCancelled(description)) return null;
+  config.metadata = { name, description: prev.metadata?.description || '' };
 
-  config.metadata = { name, description };
+  // --- 2. Auto-detect tech stack ---
+  const s = p.spinner();
+  s.start('Detecting tech stack...');
+  const detected = await detectStack(projectRoot);
+  s.stop(`Detected: ${formatDetected(detected)}`);
 
-  // --- 2. Tech stack (select from common options or type custom) ---
-  const language = await selectOrCustom('Language', [
-    'TypeScript', 'JavaScript', 'Python', 'Go', 'Rust', 'Java', 'C#', 'PHP', 'Ruby', 'Swift', 'Kotlin',
-  ], prev.tech_stack?.language);
-  if (language === null) return null;
+  const hasDetection = detected.language || detected.framework || detected.runtime || detected.database;
 
-  const framework = await selectOrCustom('Framework', [
-    'Next.js', 'React', 'Vue', 'Svelte', 'Angular', 'Nuxt', 'Remix', 'Astro',
-    'Express', 'Fastify', 'Hono', 'Django', 'Flask', 'FastAPI', 'Rails', 'Laravel', 'Spring Boot',
-  ], prev.tech_stack?.framework);
-  if (framework === null) return null;
+  if (hasDetection) {
+    const acceptStack = await p.confirm({
+      message: 'Use detected tech stack?',
+      initialValue: true,
+    });
+    if (isCancelled(acceptStack)) return null;
 
-  const database = await selectOrCustom('Database', [
-    'PostgreSQL', 'MySQL', 'SQLite', 'MongoDB', 'Redis', 'Supabase', 'PlanetScale',
-    'DynamoDB', 'Firestore', 'Prisma', 'Drizzle',
-  ], prev.tech_stack?.database);
-  if (database === null) return null;
+    if (acceptStack) {
+      config.tech_stack = {
+        ...(detected.language && { language: detected.language }),
+        ...(detected.framework && { framework: detected.framework }),
+        ...(detected.database && { database: detected.database }),
+        ...(detected.runtime && { runtime: detected.runtime }),
+      };
+    } else {
+      // Fall back to manual selection
+      const stack = await askTechStack(prev.tech_stack, detected);
+      if (!stack) return null;
+      config.tech_stack = stack;
+    }
+  } else {
+    // Nothing detected — ask manually
+    const stack = await askTechStack(prev.tech_stack);
+    if (!stack) return null;
+    config.tech_stack = stack;
+  }
 
-  const runtime = await selectOrCustom('Runtime', [
-    'Node.js', 'Bun', 'Deno', 'Python', 'Go', 'JVM', '.NET',
-  ], prev.tech_stack?.runtime);
-  if (runtime === null) return null;
-
-  config.tech_stack = {
-    ...(language && { language }),
-    ...(framework && { framework }),
-    ...(database && { database }),
-    ...(runtime && { runtime }),
-  };
-
-  // --- 3. Editors (multiselect with arrow keys + spacebar) ---
+  // --- 3. Editors ---
   const prevEditors = prev.editors
     ? Object.entries(prev.editors).filter(([, v]) => v).map(([k]) => k)
     : ['cursor', 'windsurf', 'claude'];
@@ -197,7 +236,109 @@ async function runInteractiveSetup(existing?: ExistingConfig, projectRoot?: stri
   }
   config.editors = editors;
 
-  // --- 4. Content sources ---
+  // --- 4. Auto-detect shared content source (lightweight SSOT discovery) ---
+  const detectedSsot = await detectNearbySsot(projectRoot);
+  if (detectedSsot) {
+    const useSsot = await p.confirm({
+      message: `Found shared content source at ${detectedSsot}. Link it for cross-project sync?`,
+      initialValue: true,
+    });
+    if (isCancelled(useSsot)) return null;
+
+    if (useSsot) {
+      config.content_sources = [{ type: 'local', path: detectedSsot }];
+    }
+  }
+
+  return config;
+}
+
+async function askTechStack(
+  prev?: ExistingConfig['tech_stack'],
+  detected?: DetectedStack,
+): Promise<Record<string, string> | null> {
+  const language = await selectOrCustom('Language', [
+    'TypeScript', 'JavaScript', 'Python', 'Go', 'Rust', 'Java', 'C#', 'PHP', 'Ruby', 'Swift', 'Kotlin',
+  ], prev?.language || detected?.language);
+  if (language === null) return null;
+
+  const framework = await selectOrCustom('Framework', [
+    'Next.js', 'React', 'Vue', 'Svelte', 'Angular', 'Nuxt', 'Remix', 'Astro',
+    'Express', 'Fastify', 'Hono', 'Django', 'Flask', 'FastAPI', 'Rails', 'Laravel', 'Spring Boot',
+  ], prev?.framework || detected?.framework);
+  if (framework === null) return null;
+
+  const database = await selectOrCustom('Database', [
+    'PostgreSQL', 'MySQL', 'SQLite', 'MongoDB', 'Redis', 'Supabase', 'PlanetScale',
+    'DynamoDB', 'Firestore', 'Prisma', 'Drizzle',
+  ], prev?.database || detected?.database);
+  if (database === null) return null;
+
+  const runtime = await selectOrCustom('Runtime', [
+    'Node.js', 'Bun', 'Deno', 'Python', 'Go', 'JVM', '.NET',
+  ], prev?.runtime || detected?.runtime);
+  if (runtime === null) return null;
+
+  return {
+    ...(language && { language }),
+    ...(framework && { framework }),
+    ...(database && { database }),
+    ...(runtime && { runtime }),
+  };
+}
+
+async function runAdvancedSetup(projectRoot: string, existing?: ExistingConfig): Promise<Record<string, unknown> | null> {
+  const config: Record<string, unknown> = { version: '1.0' };
+  const prev = existing || {};
+  const dirName = projectRoot.split('/').pop();
+
+  // --- 1. Project metadata ---
+  const name = await p.text({
+    message: 'Project name',
+    placeholder: 'my-project',
+    defaultValue: prev.metadata?.name || dirName || undefined,
+  });
+  if (isCancelled(name)) return null;
+
+  const description = await p.text({
+    message: 'Description (optional)',
+    placeholder: 'A short description of your project',
+    defaultValue: prev.metadata?.description || '',
+  });
+  if (isCancelled(description)) return null;
+
+  config.metadata = { name, description };
+
+  // --- 2. Tech stack (auto-detect as defaults, manual override) ---
+  const s = p.spinner();
+  s.start('Detecting tech stack...');
+  const detected = await detectStack(projectRoot);
+  s.stop(`Detected: ${formatDetected(detected)}`);
+
+  const stack = await askTechStack(prev.tech_stack, detected);
+  if (!stack) return null;
+  config.tech_stack = stack;
+
+  // --- 3. Editors ---
+  const prevEditors = prev.editors
+    ? Object.entries(prev.editors).filter(([, v]) => v).map(([k]) => k)
+    : ['cursor', 'windsurf', 'claude'];
+
+  const selectedEditors = await p.multiselect({
+    message: 'Which editors do you use? (space to toggle, enter to confirm)',
+    options: ALL_EDITORS,
+    initialValues: prevEditors,
+    required: true,
+  });
+  if (isCancelled(selectedEditors)) return null;
+
+  const editors: Record<string, boolean> = {};
+  for (const editor of ALL_EDITORS) {
+    editors[editor.value] = (selectedEditors as string[]).includes(editor.value);
+  }
+  config.editors = editors;
+
+  // --- 4. Content sources (advanced only) ---
   const prevSource = prev.content_sources?.[0];
   const hasPrevSource = !!prevSource;
 
@@ -268,7 +409,7 @@ async function runInteractiveSetup(existing?: ExistingConfig, projectRoot?: stri
   return config;
 }
 
-export async function runInit(projectRoot: string, force: boolean): Promise<void> {
+export async function runInit(projectRoot: string, force: boolean, advanced: boolean = false): Promise<void> {
   try {
     const exists = await configExists(projectRoot);
     if (exists && !force) {
@@ -290,9 +431,18 @@ export async function runInit(projectRoot: string, force: boolean): Promise<void
       }
     }
 
-    // Always run the interactive wizard (fresh or re-init)
-    p.intro(force ? '🔄 ai-toolkit re-init' : '🚀 ai-toolkit setup');
-    const result = await runInteractiveSetup(existing, projectRoot);
+    // Use advanced mode if explicitly requested, or if re-init with existing content sources
+    const useAdvanced = advanced || (existing?.content_sources && existing.content_sources.length > 0);
+
+    if (useAdvanced) {
+      p.intro(force ? '🔄 ai-toolkit re-init (advanced)' : '🚀 ai-toolkit setup (advanced)');
+    } else {
+      p.intro(force ? '🔄 ai-toolkit re-init' : '🚀 ai-toolkit setup');
+    }
+
+    const result = useAdvanced
+      ? await runAdvancedSetup(projectRoot, existing)
+      : await runQuickSetup(projectRoot, existing);
     if (!result) {
       p.cancel('Setup cancelled.');
       process.exit(0);
