@@ -1,4 +1,4 @@
-import { join } from 'path';
+import { join, normalize } from 'path';
 import type { ToolkitConfig, EditorAdapter, SyncResult } from '../core/types.js';
 import { writeTextFile } from '../utils/file-ops.js';
 import { log } from '../utils/logger.js';
@@ -36,7 +36,7 @@ export async function generateMCPConfigs(
         await writeTextFile(mcpPath, mcpJson);
         log.synced('mcp-servers', adapter.mcpConfigPath);
       }
-      result.synced.push(mcpPath);
+      result.synced.push(normalize(mcpPath));
     } catch (error) {
       const msg = `Failed to generate MCP config for ${adapter.name}: ${error instanceof Error ? error.message : error}`;
       log.error(msg);

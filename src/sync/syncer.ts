@@ -1,4 +1,4 @@
-import { join } from 'path';
+import { join, normalize } from 'path';
 import type {
   ToolkitConfig,
   EditorAdapter,
@@ -139,7 +139,7 @@ export async function runSync(
   // 7. Sync editor settings (.editorconfig, .vscode/settings.json)
   if (config.settings) {
     const settingsFiles = await syncEditorSettings(projectRoot, config, dryRun);
-    result.synced.push(...settingsFiles);
+    result.synced.push(...settingsFiles.map((f) => normalize(f)));
   }
 
   // 8. Detect orphaned files (removal is handled by CLI with user confirmation)
@@ -250,7 +250,7 @@ async function syncContentToEditors(
         await writeTextFile(targetPath, wrappedContent);
         log.synced(sourcePath, join(targetDir, file.relativePath));
       }
-      result.synced.push(targetPath);
+      result.synced.push(normalize(targetPath));
     } catch (error) {
       const msg = `Failed to sync ${file.name} to ${adapter.name}: ${error instanceof Error ? error.message : error}`;
       log.error(msg);
@@ -290,7 +290,7 @@ async function syncOverrides(
             join(adapter.directories.rules, `${override.name}.md`),
           );
         }
-        result.synced.push(targetPath);
+        result.synced.push(normalize(targetPath));
       } catch (error) {
         const msg = `Failed to sync override ${override.name} to ${adapter.name}: ${error instanceof Error ? error.message : error}`;
         log.error(msg);

@@ -1,4 +1,4 @@
-import { join } from 'path';
+import { join, normalize } from 'path';
 import type { ToolkitConfig, EditorAdapter, SyncResult } from '../core/types.js';
 import { CONTENT_DIR, PROJECT_CONTEXT_FILE } from '../core/types.js';
 import { writeTextFile, fileExists, readTextFile } from '../utils/file-ops.js';
@@ -44,7 +44,7 @@ export async function generateEntryPoints(
           await writeTextFile(entryPath, fullContent);
           log.synced('generated', adapter.entryPoint);
         }
-        result.synced.push(entryPath);
+        result.synced.push(normalize(entryPath));
       }
     } catch (error) {
       const msg = `Failed to generate entry point for ${adapter.name}: ${error instanceof Error ? error.message : error}`;
